@@ -51,10 +51,44 @@ static void batch_decode(llama_context * ctx, llama_batch & batch, float * outpu
 }
 
 int main(int argc, char ** argv) {
+    // custom argument defaults
+    bool causal_attn = false;
+
+    // split off custom arguments
+    int argc_base = 0;
+    std::vector<char *> argv_base;
+
+    // add program name
+    argc_base++;
+    argv_base.push_back(argv[0]);
+
+    // parse custom arguments
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--attention") == 0) {
+            if (++i >= argc) {
+                fprintf(stderr, "%s: error: missing argument for --attn-type\n", __func__);
+                return -1;
+            }
+            std::string value(argv[i]);
+            if (value == "causal") {
+                causal_attn = true;
+            } else if (value == "non-causal") {
+                causal_attn = false;
+            } else {
+                fprintf(stderr, "%s: error: invalid argument for --attn-type\n", __func__);
+                return -1;
+            }
+        } else {
+            fprintf(stderr, "%s: adding argument %s\n", __func__, argv[i]);
+            argc_base++;
+            argv_base.push_back(argv[i]);
+        }
+    }
+
     // parse command line arguments
     gpt_params params;
-    if (!gpt_params_parse(argc, argv, params)) {
-        gpt_params_print_usage(argc, argv, params);
+    if (!gpt_params_parse(argc_base, argv_base.data(), params)) {
+        gpt_params_print_usage(argc_base, argv_base.data(), params);
         return 1;
     }
 
@@ -80,6 +114,9 @@ int main(int argc, char ** argv) {
         fprintf(stderr, "%s: error: unable to load model\n", __func__);
         return 1;
     }
+
+    // set attention type
+    llama_set_causal_attn(ctx, causal_attn);
 
     // get pooling type used
     const enum llama_pooling_type pooling_type = llama_pooling_type(ctx);
