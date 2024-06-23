@@ -20,12 +20,11 @@ static void batch_add_seq(llama_batch & batch, const std::vector<int32_t> & toke
     }
 }
 
-static void batch_decode(llama_context * ctx, llama_batch & batch, float * output, int n_seq, int n_embd) {
+static void batch_decode(llama_context * ctx, llama_batch & batch, float * output, int n_embd) {
     // clear previous kv_cache values (irrelevant for embeddings)
     llama_kv_cache_clear(ctx);
 
     // run model
-    fprintf(stderr, "%s: n_tokens = %d, n_seq = %d\n", __func__, batch.n_tokens, n_seq);
     if (llama_decode(ctx, batch) < 0) {
         fprintf(stderr, "%s : failed to decode\n", __func__);
     }
@@ -39,13 +38,8 @@ static void batch_decode(llama_context * ctx, llama_batch & batch, float * outpu
         const float * embd = llama_get_embeddings_seq(ctx, batch.seq_id[i][0]);
         GGML_ASSERT(embd != NULL && "failed to get sequence embeddings");
 
+        // normalize on copy
         float * out = output + batch.seq_id[i][0] * n_embd;
-        //TODO: I would also add a parameter here to enable normalization or not.
-        /*fprintf(stdout, "unnormalized_embedding:");
-        for (int hh = 0; hh < n_embd; hh++) {
-            fprintf(stdout, "%9.6f ", embd[hh]);
-        }
-        fprintf(stdout, "\n");*/
         llama_embd_normalize(embd, out, n_embd);
     }
 }
@@ -174,7 +168,7 @@ int main(int argc, char ** argv) {
         // encode if at capacity
         if (batch.n_tokens + n_toks > n_batch) {
             float * out = emb + p * n_embd;
-            batch_decode(ctx, batch, out, s, n_embd);
+            batch_decode(ctx, batch, out, n_embd);
             llama_batch_clear(batch);
             p += s;
             s = 0;
@@ -188,7 +182,7 @@ int main(int argc, char ** argv) {
     // decode final batch
     if (s > 0) {
         float * out = emb + p * n_embd;
-        batch_decode(ctx, batch, out, s, n_embd);
+        batch_decode(ctx, batch, out, n_embd);
     }
 
     // print the first part of the embeddings or for a single prompt, the full embedding
