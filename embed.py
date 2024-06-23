@@ -3,6 +3,13 @@
 import numpy as np
 
 import api
+from api import (
+    LLAMA_POOLING_TYPE_UNSPECIFIED,
+    LLAMA_POOLING_TYPE_NONE,
+    LLAMA_POOLING_TYPE_MEAN,
+    LLAMA_POOLING_TYPE_CLS,
+    LLAMA_POOLING_TYPE_LAST,
+)
 
 class LlamaBatch:
     def __init__(self, n_tokens, n_seq_max=1):
@@ -25,7 +32,7 @@ class LlamaBatch:
 class LlamaModel:
     def __init__(
         self, path_model, batch_size=512, n_gpu_layers=0, causal_attn=None,
-        pooling_type=api.LLAMA_POOLING_TYPE_UNSPECIFIED
+        pooling_type=LLAMA_POOLING_TYPE_UNSPECIFIED
     ):
         # initialize llama backend
         api.llama_backend_init()
@@ -48,6 +55,9 @@ class LlamaModel:
         # set causal attention
         if causal_attn is not None:
             api.llama_set_causal_attn(self.context, causal_attn)
+
+        # create batch for encoding
+        self.batch = LlamaBatch(batch_size)
 
     def __del__(self):
         api.llama_free(self.context)
@@ -79,17 +89,17 @@ class LlamaModel:
             )
 
         # run decode on batch
-        batch = LlamaBatch(self.context_params.n_batch, n_seq_max=n_seqs)
+        self.batch.clear()
         for i, ts in enumerate(tokens):
-            batch.add_sequence(ts, seq_id=i)
-        api.llama_decode(self.context, batch.batch)
+            self.batch.add_sequence(ts, seq_id=i)
+        api.llama_decode(self.context, self.batch.batch)
 
         # get embedding stats
         n_embd = api.llama_n_embd(self.model)
         pooling_type = api.llama_pooling_type(self.context)
 
         # handle un-pooled case separately
-        if pooling_type == api.LLAMA_POOLING_TYPE_NONE:
+        if pooling_type == LLAMA_POOLING_TYPE_NONE:
             n_tokens_all = sum(n_tokens)
             embeds = api.llama_get_embeddings(self.context, n_tokens_all, n_embd)
             # TODO: should break this up into list of ndarrays
