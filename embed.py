@@ -1,6 +1,6 @@
 # embedding interface
 
-import numpy as np
+import torch
 
 import api
 from api import (
@@ -27,13 +27,17 @@ class LlamaBatch:
             self.batch.token[i] = k
             self.batch.n_seq_id[i] = 1
             self.batch.seq_id[i][0] = seq_id
+            self.batch.logits[i] = 1
         self.batch.n_tokens += len(tokens)
 
 class LlamaModel:
     def __init__(
         self, path_model, batch_size=512, n_gpu_layers=0, causal_attn=None,
-        pooling_type=LLAMA_POOLING_TYPE_UNSPECIFIED
+        dtype=torch.float32, pooling_type=LLAMA_POOLING_TYPE_UNSPECIFIED
     ):
+        # output params
+        self.dtype = dtype
+
         # initialize llama backend
         api.llama_backend_init()
         api.llama_numa_init()
@@ -103,16 +107,18 @@ class LlamaModel:
             n_tokens_all = sum(n_tokens)
             embeds = api.llama_get_embeddings(self.context, n_tokens_all, n_embd)
             # TODO: should break this up into list of ndarrays
-            return embeds.copy()
+            return torch.from_numpy(embeds).to(dtype=self.dtype, copy=True)
 
         # retrieve embeddings for each sequence
-        embeds = np.zeros((n_seqs, n_embd), dtype=np.float32)
+        embeds = torch.zeros((n_seqs, n_embd), dtype=self.dtype)
         for i in range(n_seqs):
-            embeds[i,:] = api.llama_get_embeddings_seq(self.context, i, n_embd)
+            embeds[i,:] = torch.from_numpy(
+                api.llama_get_embeddings_seq(self.context, i, n_embd)
+            )
 
         # normalize embeddings
         if normalize:
-            embeds /= np.linalg.norm(embeds, axis=1, keepdims=True)
+            embeds /= torch.norm(embeds, dim=1, keepdim=True)
 
         # return embeddings
         return embeds

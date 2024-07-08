@@ -1,5 +1,5 @@
 ### llama.cpp bindings for embeddings
-### heavily ported from llama-cpp-python
+### mostly copied from llama-cpp-python
 
 import ctypes
 
@@ -23,7 +23,7 @@ def load_llama_lib(lib_path):
 
 # load shared library
 # _lib = DummyLib()
-_lib = load_llama_lib('build/llama.cpp/libllama.so')
+_lib = load_llama_lib('build/llama.cpp/src/libllama.so')
 
 ##
 ## utils
