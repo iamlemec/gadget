@@ -3,13 +3,13 @@
 import ctypes
 import numpy as np
 
-import lib
+from . import lib
 
 ##
 ## imports
 ##
 
-from lib import (
+from .lib import (
     LLAMA_POOLING_TYPE_UNSPECIFIED,
     LLAMA_POOLING_TYPE_NONE,
     LLAMA_POOLING_TYPE_MEAN,

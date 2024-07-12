@@ -2,16 +2,15 @@
 
 import torch
 
-import api
-from api import (
+from . import api
+from .api import (
     LLAMA_POOLING_TYPE_UNSPECIFIED,
     LLAMA_POOLING_TYPE_NONE,
     LLAMA_POOLING_TYPE_MEAN,
     LLAMA_POOLING_TYPE_CLS,
     LLAMA_POOLING_TYPE_LAST,
 )
-
-from utils import pack_batches
+from .utils import pack_batches
 
 class LlamaBatch:
     def __init__(self, n_tokens, n_seq_max=1):

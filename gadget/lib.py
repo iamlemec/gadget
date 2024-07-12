@@ -23,7 +23,7 @@ def load_llama_lib(lib_path):
 
 # load shared library
 # _lib = DummyLib()
-_lib = load_llama_lib('../build/llama.cpp/src/libllama.so')
+_lib = load_llama_lib('build/llama.cpp/src/libllama.so')
 
 ##
 ## utils

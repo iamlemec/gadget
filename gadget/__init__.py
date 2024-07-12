@@ -2,7 +2,7 @@
 
 from .embed import LlamaModel
 
-from api import (
+from .api import (
     LLAMA_POOLING_TYPE_UNSPECIFIED,
     LLAMA_POOLING_TYPE_NONE,
     LLAMA_POOLING_TYPE_MEAN,
