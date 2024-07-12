@@ -9,3 +9,5 @@ from .api import (
     LLAMA_POOLING_TYPE_CLS,
     LLAMA_POOLING_TYPE_LAST,
 )
+
+__version__ = "0.1"

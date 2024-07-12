@@ -1,6 +1,7 @@
 ### llama.cpp bindings for embeddings
 ### mostly copied from llama-cpp-python
 
+import os
 import ctypes
 
 ##
@@ -21,9 +22,16 @@ def load_llama_lib(lib_path):
     except Exception as e:
         raise RuntimeError(f"Failed to load shared library '{lib_path}': {e}")
 
+# get shared library path
+if 'GADGET_LLAMA_LIB' in os.environ:
+    library_path = os.environ['GADGET_LLAMA_LIB']
+else:
+    module_path = os.path.dirname(os.path.abspath(__file__))
+    library_path = os.path.join(module_path, 'libllama.so')
+
 # load shared library
 # _lib = DummyLib()
-_lib = load_llama_lib('build/llama.cpp/src/libllama.so')
+_lib = load_llama_lib(library_path)
 
 ##
 ## utils
