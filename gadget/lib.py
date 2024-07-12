@@ -23,7 +23,7 @@ def load_llama_lib(lib_path):
 
 # load shared library
 # _lib = DummyLib()
-_lib = load_llama_lib('build/llama.cpp/src/libllama.so')
+_lib = load_llama_lib('../build/llama.cpp/src/libllama.so')
 
 ##
 ## utils
@@ -85,7 +85,7 @@ LLAMA_POOLING_TYPE_UNSPECIFIED = -1
 LLAMA_POOLING_TYPE_NONE = 0
 LLAMA_POOLING_TYPE_MEAN = 1
 LLAMA_POOLING_TYPE_CLS = 2
-LLAMA_POOLING_TYPE_LAST = 3   
+LLAMA_POOLING_TYPE_LAST = 3
 
 ##
 ## options
