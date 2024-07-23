@@ -178,3 +178,6 @@ class LlamaModel:
             embeds /= torch.norm(embeds, dim=1, keepdim=True)
 
         return embeds
+
+    def __call__(self, *args, **kwargs):
+        return self.embed(*args, **kwargs)
