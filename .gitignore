@@ -1,5 +1,3 @@
 build
 __pycache__
-
-gadget/libggml.so
-gadget/libllama.so
+gadget/*.so
