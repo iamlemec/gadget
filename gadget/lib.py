@@ -71,6 +71,11 @@ GGML_MAX_OP_PARAMS = 64
 ## enums
 ##
 
+GGML_STATUS_ALLOC_FAILED = -2
+GGML_STATUS_FAILED       = -1
+GGML_STATUS_SUCCESS      = 0
+GGML_STATUS_ABORTED      = 1
+
 # ggml_object_type
 GGML_OBJECT_TYPE_TENSOR      = 0
 GGML_OBJECT_TYPE_GRAPH       = 1
@@ -220,6 +225,25 @@ ggml_tensor._fields_ = [
     ("extra"    , ctypes.c_void_p                        ),
 ]
 
+class ggml_hash_set(ctypes.Structure):
+    _fields_ = [
+        ("size", ctypes.c_size_t              ),
+        ("keys", ctypes.POINTER(ggml_tensor_p)),
+    ]
+
+class ggml_cgraph(ctypes.Structure):
+    _fields_ = [
+        ("size"              , ctypes.c_int                 ),
+        ("n_nodes"           , ctypes.c_int                 ),
+        ("n_leafs"           , ctypes.c_int                 ),
+        ("nodes"             , ctypes.POINTER(ggml_tensor_p)),
+        ("grads"             , ctypes.POINTER(ggml_tensor_p)),
+        ("leafs"             , ctypes.POINTER(ggml_tensor_p)),
+        ("visited_hash_table", ggml_hash_set                ),
+        ("order"             , ctypes.c_int                 ),
+    ]
+ggml_cgraph_p = ctypes.POINTER(ggml_cgraph)
+
 ##
 ## functions
 ##
@@ -258,6 +282,29 @@ def  ggml_init(params): ...
     ggml_tensor_p
 )
 def ggml_new_tensor_2d(ctx, type, ne0, ne1): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p],
+    ggml_cgraph_p
+)
+def ggml_new_graph(ctx): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_mul_mat(ctx, a, b): ...
+
+@ctypes_function(_ggml,
+    [ggml_cgraph_p, ggml_tensor_p],
+)
+def ggml_build_forward_expand(cgraph, tensor): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_cgraph_p, ctypes.c_int],
+    ctypes.c_int
+)
+def ggml_graph_compute_with_ctx(ctx, cgraph, n_threads): ...
 
 ########################################
 ## llama defs                         ##
