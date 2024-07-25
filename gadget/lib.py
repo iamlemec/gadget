@@ -29,7 +29,7 @@ if 'GADGET_LLAMA_LIB' in os.environ:
 else:
     module_path = os.path.dirname(os.path.abspath(__file__))
     llama_path = os.path.join(module_path, 'libllama.so')
-    ggml_path = os.path.join(module_path, 'libggml_shared.so')
+    ggml_path = os.path.join(module_path, 'libggml.so')
 
 # load shared library
 # _ggml = DummyLib()
@@ -223,6 +223,24 @@ ggml_tensor._fields_ = [
 ##
 ## functions
 ##
+
+@ctypes_function(_ggml,
+    [ctypes.c_int],
+    ctypes.c_size_t
+)
+def ggml_type_size(type): ...
+
+@ctypes_function(_ggml,
+    None,
+    ctypes.c_size_t,
+)
+def ggml_tensor_overhead(): ...
+
+@ctypes_function(_ggml,
+    None,
+    ctypes.c_size_t,
+)
+def ggml_graph_overhead(): ...
 
 @ctypes_function(_ggml,
     [ggml_init_params],
