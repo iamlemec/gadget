@@ -48,16 +48,16 @@ def test_ggml_ctx():
     a_np = tensor_to_numpy(a)
     b_np = tensor_to_numpy(b)
 
-    # fill arrays
-    a_np[:,:] = [[2 , 8], [5, 1], [4, 2], [8, 6]]
-    b_np[:,:] = [[10, 5], [9, 9], [5, 4]]
-
     # do multiplication
     c = ggml_mul_mat(ctx, a, b)
 
     # create graph
     gf = ggml_new_graph(ctx)
     ggml_build_forward_expand(gf, c)
+
+    # fill arrays
+    a_np[:,:] = [[2 , 8], [5, 1], [4, 2], [8, 6]]
+    b_np[:,:] = [[10, 5], [9, 9], [5, 4]]
 
     # compute graph
     ggml_graph_compute_with_ctx(ctx, gf, 1)
