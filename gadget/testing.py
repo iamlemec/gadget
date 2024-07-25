@@ -44,16 +44,16 @@ def test_ggml_ctx():
     a = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, cols_A, rows_A)
     b = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, cols_B, rows_B)
 
-    # create numpy arrays
-    a_np = tensor_to_numpy(a)
-    b_np = tensor_to_numpy(b)
-
     # do multiplication
     c = ggml_mul_mat(ctx, a, b)
 
     # create graph
     gf = ggml_new_graph(ctx)
     ggml_build_forward_expand(gf, c)
+
+    # create numpy arrays
+    a_np = tensor_to_numpy(a)
+    b_np = tensor_to_numpy(b)
 
     # fill arrays
     a_np[:,:] = [[2 , 8], [5, 1], [4, 2], [8, 6]]
