@@ -3,7 +3,7 @@
 import ctypes
 import numpy as np
 
-from .lib import (
+from .ggml import (
     ggml_type_size, ggml_tensor_overhead, ggml_graph_overhead,
     ggml_init_params, ggml_init, ggml_new_tensor_2d, ggml_mul_mat,
     ggml_new_graph, ggml_build_forward_expand, ggml_graph_compute_with_ctx,

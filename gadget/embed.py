@@ -2,8 +2,8 @@
 
 import torch
 
-from . import api
-from .api import (
+from . import llama
+from .llama import (
     LLAMA_POOLING_TYPE_UNSPECIFIED,
     LLAMA_POOLING_TYPE_NONE,
     LLAMA_POOLING_TYPE_MEAN,
@@ -14,10 +14,10 @@ from .utils import pack_batches
 
 class LlamaBatch:
     def __init__(self, n_tokens, n_seq_max=1):
-        self.batch = api.llama_batch_init(n_tokens, embd=0, n_seq_max=n_seq_max)
+        self.batch = llama.llama_batch_init(n_tokens, embd=0, n_seq_max=n_seq_max)
 
     def __del__(self):
-        api.llama_batch_free(self.batch)
+        llama.llama_batch_free(self.batch)
 
     def clear(self):
         self.batch.n_tokens = 0
@@ -58,42 +58,42 @@ class LlamaModel:
         self.batch_size = batch_size
 
         # initialize llama backend
-        api.llama_backend_init()
-        api.llama_numa_init()
+        llama.llama_backend_init()
+        llama.llama_numa_init()
 
         # load model from file
-        self.model_params = api.llama_model_default_params()
+        self.model_params = llama.llama_model_default_params()
         self.model_params.n_gpu_layers = n_gpu_layers
-        self.model = api.llama_load_model_from_file(path_model, self.model_params)
+        self.model = llama.llama_load_model_from_file(path_model, self.model_params)
 
         # initialize context
-        self.context_params = api.llama_context_default_params()
+        self.context_params = llama.llama_context_default_params()
         self.context_params.embeddings = True
         self.context_params.n_ctx = batch_size
         self.context_params.n_batch = batch_size
         self.context_params.n_ubatch = batch_size
         self.context_params.pooling_type = pooling_type
-        self.context = api.llama_new_context_with_model(self.model, self.context_params)
+        self.context = llama.llama_new_context_with_model(self.model, self.context_params)
 
         # set causal attention
         if causal_attn is not None:
-            api.llama_set_causal_attn(self.context, causal_attn)
+            llama.llama_set_causal_attn(self.context, causal_attn)
 
         # static model features
-        self.embed_size = api.llama_n_embd(self.model)
+        self.embed_size = llama.llama_n_embd(self.model)
 
         # create batch for encoding
         self.batch = LlamaBatch(batch_size)
 
     def __del__(self):
-        api.llama_free(self.context)
-        api.llama_free_model(self.model)
-        api.llama_backend_free()
+        llama.llama_free(self.context)
+        llama.llama_free_model(self.model)
+        llama.llama_backend_free()
 
     def tokenize(self, text, max_tokens=None):
         if max_tokens is None:
             max_tokens = self.context_params.n_batch
-        return api.llama_tokenize(self.model, text, max_tokens)
+        return llama.llama_tokenize(self.model, text, max_tokens)
 
     def encode_batch(self, tokens):
         # check for empty input
@@ -118,15 +118,15 @@ class LlamaModel:
         self.batch.clear()
         for i, ts in enumerate(tokens):
             self.batch.add_sequence(ts, seq_id=i)
-        api.llama_decode(self.context, self.batch.batch)
+        llama.llama_decode(self.context, self.batch.batch)
 
         # get embedding stats
-        pooling_type = api.llama_pooling_type(self.context)
+        pooling_type = llama.llama_pooling_type(self.context)
 
         # handle un-pooled case separately
         if pooling_type == LLAMA_POOLING_TYPE_NONE:
             n_tokens_all = sum(n_tokens)
-            data = api.llama_get_embeddings(self.context, n_tokens_all, self.embed_size)
+            data = llama.llama_get_embeddings(self.context, n_tokens_all, self.embed_size)
             embeds = torch.from_numpy(data).to(dtype=self.dtype, copy=True)
             return embeds.split(n_tokens, dim=0)
 
@@ -134,7 +134,7 @@ class LlamaModel:
         embeds = torch.empty((n_seqs, self.embed_size), device=self.device, dtype=self.dtype)
         for i in range(n_seqs):
             embeds[i,:] = torch.from_numpy(
-                api.llama_get_embeddings_seq(self.context, i, self.embed_size)
+                llama.llama_get_embeddings_seq(self.context, i, self.embed_size)
             )
 
         # return embeddings
@@ -146,7 +146,7 @@ class LlamaModel:
             text = [text]
 
         # get embedding stats
-        pooling_type = api.llama_pooling_type(self.context)
+        pooling_type = llama.llama_pooling_type(self.context)
 
         # tokenize text
         n_seqs = len(text)

@@ -3,13 +3,13 @@
 import ctypes
 import numpy as np
 
-from . import lib
-
 ##
 ## imports
 ##
 
-from .lib import (
+from .libs import _libllama
+
+from .libs._libllama import (
     LLAMA_POOLING_TYPE_UNSPECIFIED,
     LLAMA_POOLING_TYPE_NONE,
     LLAMA_POOLING_TYPE_MEAN,
@@ -36,29 +36,29 @@ from .lib import (
 ## wrappers
 ##
 
-def llama_numa_init(numa=lib.GGML_NUMA_STRATEGY_DISABLED):
-    lib.llama_numa_init(numa)
+def llama_numa_init(numa=_libllama.GGML_NUMA_STRATEGY_DISABLED):
+    llama.llama_numa_init(numa)
 
 def llama_load_model_from_file(path_model, params):
-    return lib.llama_load_model_from_file(path_model.encode('utf-8'), params)
+    return _libllama.llama_load_model_from_file(path_model.encode('utf-8'), params)
 
 def llama_batch_init(n_tokens, embd=0, n_seq_max=1):
-    return lib.llama_batch_init(n_tokens, embd, n_seq_max)
+    return _libllama.llama_batch_init(n_tokens, embd, n_seq_max)
 
 def llama_tokenize(model, text, max_tokens, add_special=True, parse_special=False):
     text_bytes = text.encode('utf-8')
     text_len = len(text_bytes)
     tokens = np.zeros(max_tokens, dtype=np.int32)
     tokens_p = tokens.ctypes.data_as(ctypes.POINTER(ctypes.c_int32))
-    n_tokens = lib.llama_tokenize(
+    n_tokens = _libllama.llama_tokenize(
         model, text_bytes, text_len, tokens_p, max_tokens, add_special, parse_special
     )
     return tokens[:n_tokens].tolist()
 
 def llama_get_embeddings(ctx, n_tokens, n_embd):
-    p_embd = lib.llama_get_embeddings(ctx)
+    p_embd = _libllama.llama_get_embeddings(ctx)
     return np.ctypeslib.as_array(p_embd, shape=(n_tokens, n_embd))
 
 def llama_get_embeddings_seq(ctx, seq_id, n_embd):
-    p_embd = lib.llama_get_embeddings_seq(ctx, seq_id)
+    p_embd = _libllama.llama_get_embeddings_seq(ctx, seq_id)
     return np.ctypeslib.as_array(p_embd, shape=(n_embd,))
