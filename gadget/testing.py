@@ -112,7 +112,7 @@ def test_ggml_backend():
     arr_graph = ctypes.create_string_buffer(mem_graph)
     buf_graph = ctypes.cast(arr_graph, ctypes.c_void_p)
 
-    # initialize ggml
+    # create graph context
     par_graph = ggml_init_params(mem_graph, buf_graph, True)
     ctx_graph = ggml_init(par_graph)
 
