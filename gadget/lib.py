@@ -67,6 +67,9 @@ GGML_MAX_SRC       = 10
 GGML_MAX_NAME      = 64
 GGML_MAX_OP_PARAMS = 64
 
+GGML_DEFAULT_GRAPH_SIZE = 2048
+MAX_FREE_BLOCKS = 256
+
 ##
 ## enums
 ##
@@ -225,6 +228,7 @@ ggml_tensor._fields_ = [
     ("extra"    , ctypes.c_void_p                        ),
 ]
 
+# graph construction
 class ggml_hash_set(ctypes.Structure):
     _fields_ = [
         ("size", ctypes.c_size_t              ),
@@ -244,9 +248,125 @@ class ggml_cgraph(ctypes.Structure):
     ]
 ggml_cgraph_p = ctypes.POINTER(ggml_cgraph)
 
+# backend and backend context
+class ggml_backend_i    (ctypes.Structure): ...
+class ggml_backend      (ctypes.Structure): ...
+class ggml_backend_event(ctypes.Structure): ...
+
+# pointer convenience variables
+ggml_guid                 = ctypes.c_uint8 * 16
+ggml_guid_p               = ctypes.POINTER(ggml_guid)
+ggml_backend_p            = ctypes.POINTER(ggml_backend)
+ggml_backend_event_p      = ctypes.POINTER(ggml_backend_event)
+ggml_backend_context_p    = ctypes.c_void_p
+ggml_backend_graph_plan_p = ctypes.c_void_p
+
+ggml_backend_i._fields_ = [
+    ("get_name"               , ctypes.CFUNCTYPE(ctypes.c_char_p           , ggml_backend_p                                                                  )),
+    ("free"                   , ctypes.CFUNCTYPE(None                      , ggml_backend_p                                                                  )),
+    ("get_default_buffer_type", ctypes.CFUNCTYPE(ggml_backend_buffer_type_p, ggml_backend_p                                                                  )),
+    ("set_tensor_async"       , ctypes.CFUNCTYPE(None                      , ggml_backend_p, ggml_tensor_p, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_size_t)),
+    ("get_tensor_async"       , ctypes.CFUNCTYPE(None                      , ggml_backend_p, ggml_tensor_p, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_size_t)),
+    ("cpy_tensor_async"       , ctypes.CFUNCTYPE(ctypes.c_bool             , ggml_backend_p, ggml_backend_p, ggml_tensor_p, ggml_tensor_p                    )),
+    ("synchronize"            , ctypes.CFUNCTYPE(None                      , ggml_backend_p                                                                  )),
+    ("graph_plan_create"      , ctypes.CFUNCTYPE(ggml_backend_graph_plan_p , ggml_backend_p, ggml_cgraph_p                                                   )),
+    ("graph_plan_free"        , ctypes.CFUNCTYPE(None                      , ggml_backend_p, ggml_backend_graph_plan_p                                       )),
+    ("graph_plan_update"      , ctypes.CFUNCTYPE(None                      , ggml_backend_p, ggml_backend_graph_plan_p, ggml_cgraph_p                        )),
+    ("graph_plan_compute"     , ctypes.CFUNCTYPE(ctypes.c_int              , ggml_backend_p, ggml_backend_graph_plan_p                                       )),
+    ("graph_compute"          , ctypes.CFUNCTYPE(ctypes.c_int              , ggml_backend_p, ggml_cgraph_p                                                   )),
+    ("supports_op"            , ctypes.CFUNCTYPE(ctypes.c_bool             , ggml_backend_p, ggml_tensor_p                                                   )),
+    ("supports_buft"          , ctypes.CFUNCTYPE(ctypes.c_bool             , ggml_backend_p, ggml_backend_buffer_type_p                                      )),
+    ("offload_op"             , ctypes.CFUNCTYPE(ctypes.c_bool             , ggml_backend_p, ggml_tensor_p                                                   )),
+    ("event_new"              , ctypes.CFUNCTYPE(ggml_backend_event_p      , ggml_backend_p                                                                  )),
+    ("event_free"             , ctypes.CFUNCTYPE(None                      , ggml_backend_event_p                                                            )),
+    ("event_record"           , ctypes.CFUNCTYPE(None                      , ggml_backend_event_p                                                            )),
+    ("event_wait"             , ctypes.CFUNCTYPE(None                      , ggml_backend_p, ggml_backend_event_p                                            )),
+    ("event_synchronize"      , ctypes.CFUNCTYPE(None                      , ggml_backend_event_p                                                            )),
+]
+
+ggml_backend._fields_ = [
+    ("guid"   , ggml_guid_p           ),
+    ("iface"  , ggml_backend_i        ),
+    ("context", ggml_backend_context_p),
+]
+
+ggml_backend_event._fields_ = [
+    ("backend", ggml_backend_p ),
+    ("context", ctypes.c_void_p),
+]
+
+class hash_node(ctypes.Structure):
+    _fields_ = [
+        ("n_children", ctypes.c_int   ),
+        ("n_views"   , ctypes.c_int   ),
+        ("buffer_id" , ctypes.c_int   ),
+        ("offset"    , ctypes.c_size_t),
+        ("allocated" , ctypes.c_bool  ),
+    ]
+hash_node_p        = ctypes.POINTER(hash_node)
+
+class tensor_alloc(ctypes.Structure):
+    _fields_ = [
+        ("buffer_id", ctypes.c_int   ),
+        ("offset"   , ctypes.c_size_t),
+        ("size_max" , ctypes.c_size_t),
+    ]
+tensor_alloc_p     = ctypes.POINTER(tensor_alloc)
+
+class leaf_alloc(ctypes.Structure):
+    _fields_ = [
+        ("buffer_id", ctypes.c_int),
+        ("leaf"     , tensor_alloc),
+    ]
+leaf_alloc_p       = ctypes.POINTER(leaf_alloc)
+
+class node_alloc(ctypes.Structure):
+    _fields_ = [
+        ("dst", tensor_alloc               ),
+        ("src", tensor_alloc * GGML_MAX_SRC),
+    ]
+node_alloc_p       = ctypes.POINTER(node_alloc)
+
+class free_block(ctypes.Structure):
+    _fields_ = [
+        ("offset", ctypes.c_size_t),
+        ("size"  , ctypes.c_size_t),
+    ]
+free_block_p       = ctypes.POINTER(free_block)
+
+class ggml_dyn_tallocr(ctypes.Structure):
+    _fields_ = [
+        ("alignment"    , ctypes.c_size_t             ),
+        ("n_free_blocks", ctypes.c_int                ),
+        ("free_blocks"  , free_block * MAX_FREE_BLOCKS),
+        ("max_size"     , ctypes.c_size_t             ),
+    ]
+ggml_dyn_tallocr_p = ctypes.POINTER(ggml_dyn_tallocr)
+
+class ggml_gallocr(ctypes.Structure):
+    _fields_ = [
+        ("bufts"      , ggml_backend_buffer_type_p        ),
+        ("buffers"    , ggml_backend_buffer_p             ),
+        ("buf_tallocs", ctypes.POINTER(ggml_dyn_tallocr_p)),
+        ("n_buffers"  , ctypes.c_int                      ),
+        ("hash_set"   , ggml_hash_set                     ),
+        ("hash_values", hash_node_p                       ),
+        ("node_allocs", node_alloc_p                      ),
+        ("n_nodes"    , ctypes.c_int                      ),
+        ("leaf_allocs", leaf_alloc_p                      ),
+        ("n_leafs"    , ctypes.c_int                      ),
+    ]
+ggml_gallocr_p = ctypes.POINTER(ggml_gallocr)
+
 ##
 ## functions
 ##
+
+@ctypes_function(_ggml,
+    None,
+    ggml_backend_p
+)
+def ggml_backend_cpu_init(): ...
 
 @ctypes_function(_ggml,
     [ctypes.c_int],
@@ -262,7 +382,7 @@ def ggml_tensor_overhead(): ...
 
 @ctypes_function(_ggml,
     None,
-    ctypes.c_size_t,
+    ctypes.c_size_t
 )
 def ggml_graph_overhead(): ...
 
@@ -271,6 +391,60 @@ def ggml_graph_overhead(): ...
     ggml_context_p
 )
 def  ggml_init(params): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p],
+    None
+)
+def ggml_free(ctx): ...
+
+@ctypes_function(_ggml,
+    [ggml_backend_p],
+    ggml_backend_buffer_type_p
+)
+def ggml_backend_get_default_buffer_type(backend): ...
+
+@ctypes_function(_ggml,
+    [ggml_backend_p, ctypes.c_int],
+    None
+)
+def ggml_backend_cpu_set_n_threads(backend_cpu, n_threads): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_backend_p],
+    ggml_backend_buffer_p
+)
+def ggml_backend_alloc_ctx_tensors(): ...
+
+@ctypes_function(_ggml,
+    [ggml_backend_p, ggml_cgraph_p],
+    ctypes.c_int
+)
+def ggml_backend_graph_compute(backend, cgraph): ...
+
+@ctypes_function(_ggml,
+    [ggml_backend_buffer_type_p],
+    ggml_gallocr_p
+)
+def ggml_gallocr_new(buft): ...
+
+@ctypes_function(_ggml,
+    [ggml_gallocr_p, ggml_cgraph_p],
+    ctypes.c_bool
+)
+def ggml_gallocr_reserve(galloc, graph): ...
+
+@ctypes_function(_ggml,
+    [ggml_gallocr_p, ctypes.c_int],
+    ctypes.c_size_t
+)
+def ggml_gallocr_get_buffer_size(galloc, buffer_id): ...
+
+@ctypes_function(_ggml,
+    [ggml_gallocr_p, ggml_cgraph_p],
+    ctypes.c_bool
+)
+def ggml_gallocr_alloc_graph(galloc, graph): ...
 
 @ctypes_function(_ggml,
     [
