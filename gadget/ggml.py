@@ -10,6 +10,7 @@ from .libs._libggml import (
     ggml_init,
     ggml_free,
     ggml_backend_cpu_init,
+    ggml_backend_free,
     ggml_backend_alloc_ctx_tensors,
     ggml_backend_get_default_buffer_type,
     ggml_backend_cpu_set_n_threads,

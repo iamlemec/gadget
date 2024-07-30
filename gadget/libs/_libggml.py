@@ -348,6 +348,12 @@ ggml_gallocr_p = ctypes.POINTER(ggml_gallocr)
 def ggml_backend_cpu_init(): ...
 
 @ctypes_function(_ggml,
+    None,
+    ggml_backend_p
+)
+def ggml_backend_free(backend): ...
+
+@ctypes_function(_ggml,
     [ctypes.c_int],
     ctypes.c_size_t
 )
