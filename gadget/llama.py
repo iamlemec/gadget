@@ -37,7 +37,7 @@ from .libs._libllama import (
 ##
 
 def llama_numa_init(numa=_libllama.GGML_NUMA_STRATEGY_DISABLED):
-    llama.llama_numa_init(numa)
+    _libllama.llama_numa_init(numa)
 
 def llama_load_model_from_file(path_model, params):
     return _libllama.llama_load_model_from_file(path_model.encode('utf-8'), params)
