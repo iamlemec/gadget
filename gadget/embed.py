@@ -10,7 +10,7 @@ from .llama import (
     LLAMA_POOLING_TYPE_CLS,
     LLAMA_POOLING_TYPE_LAST,
 )
-from .utils import pack_batches
+from .utils import list_splitter, pack_batches
 
 class LlamaBatch:
     def __init__(self, n_tokens, n_seq_max=1):
@@ -91,9 +91,10 @@ class LlamaModel:
         llama.llama_backend_free()
 
     def tokenize(self, text, max_tokens=None):
-        if max_tokens is None:
-            max_tokens = self.context_params.n_batch
-        return llama.llama_tokenize(self.model, text, max_tokens)
+        tokens = llama.llama_tokenize(self.model, text)
+        if max_tokens is not None:
+            tokens = tokens[:max_tokens]
+        return tokens
 
     def encode_batch(self, tokens):
         # check for empty input
@@ -148,9 +149,9 @@ class LlamaModel:
         # get embedding stats
         pooling_type = llama.llama_pooling_type(self.context)
 
-        # tokenize text
+        # tokenize text (and truncate)
         n_seqs = len(text)
-        tokens = [self.tokenize(s) for s in text]
+        tokens = [self.tokenize(s, max_tokens=self.batch_size) for s in text]
 
         # plan batch contents
         sizes = [len(toks) for toks in tokens]

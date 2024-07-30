@@ -2,6 +2,15 @@
 
 from collections import defaultdict
 
+# get batch indices
+def batch_indices(length, batch_size):
+    return [(i, min(i+batch_size, length)) for i in range(0, length, batch_size)]
+
+# split text into chunks
+def list_splitter(text, maxlen):
+    for i, j in batch_indices(len(text), maxlen):
+        yield text[i:j]
+
 # = defaultdict(list)
 # + handles popping off maximal list
 # + handles deletion on empty list

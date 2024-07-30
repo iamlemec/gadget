@@ -268,6 +268,18 @@ def llama_n_embd(model): ...
 
 @ctypes_function(_llama,
     [llama_context_p],
+    ctypes.c_int32
+)
+def llama_n_ctx(ctx): ...
+
+@ctypes_function(_llama,
+    [llama_model_p],
+    ctypes.c_int32
+)
+def llama_n_ctx_train(model): ...
+
+@ctypes_function(_llama,
+    [llama_context_p],
     ctypes.POINTER(ctypes.c_float)
 )
 def llama_get_embeddings(ctx, seq_id): ...

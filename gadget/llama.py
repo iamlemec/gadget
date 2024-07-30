@@ -30,6 +30,8 @@ from .libs._libllama import (
     llama_pooling_type,
     llama_set_causal_attn,
     llama_n_embd,
+    llama_n_ctx,
+    llama_n_ctx_train,
 )
 
 ##
@@ -45,14 +47,34 @@ def llama_load_model_from_file(path_model, params):
 def llama_batch_init(n_tokens, embd=0, n_seq_max=1):
     return _libllama.llama_batch_init(n_tokens, embd, n_seq_max)
 
-def llama_tokenize(model, text, max_tokens, add_special=True, parse_special=False):
+def llama_tokenize(model, text, max_tokens=None, add_special=True, parse_special=False):
+    # sensible fallback
+    if max_tokens is None:
+        max_tokens = llama_n_ctx_train(model)
+
+    # encode text
     text_bytes = text.encode('utf-8')
     text_len = len(text_bytes)
+
+    # set up output vector
     tokens = np.zeros(max_tokens, dtype=np.int32)
     tokens_p = tokens.ctypes.data_as(ctypes.POINTER(ctypes.c_int32))
+
+    # attempt to tokenize
     n_tokens = _libllama.llama_tokenize(
         model, text_bytes, text_len, tokens_p, max_tokens, add_special, parse_special
     )
+
+    # if we undershot
+    if n_tokens < 0:
+        max_tokens = abs(n_tokens)
+        tokens = np.zeros(max_tokens, dtype=np.int32)
+        tokens_p = tokens.ctypes.data_as(ctypes.POINTER(ctypes.c_int32))
+        n_tokens = _libllama.llama_tokenize(
+            model, text_bytes, text_len, tokens_p, max_tokens, add_special, parse_special
+        )
+
+    # return tokens as list
     return tokens[:n_tokens].tolist()
 
 def llama_get_embeddings(ctx, n_tokens, n_embd):
