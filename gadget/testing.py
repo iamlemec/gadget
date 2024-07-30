@@ -99,12 +99,12 @@ def test_ggml_backend():
     a = ggml_new_tensor_2d(ctx_tensors, GGML_TYPE_F32, cols_A, rows_A)
     b = ggml_new_tensor_2d(ctx_tensors, GGML_TYPE_F32, cols_B, rows_B)
 
-    # create backend buffer
-    buffer = ggml_backend_alloc_ctx_tensors(ctx_tensors, backend)
+    # assign tensors to backend
+    ggml_backend_alloc_ctx_tensors(ctx_tensors, backend)
 
     ## build_graph
 
-    # compute memory requirements
+    # compute memory requirements for graph
     mem_graph = (
         ggml_tensor_overhead() * GGML_DEFAULT_GRAPH_SIZE +
         ggml_graph_overhead()
@@ -116,21 +116,25 @@ def test_ggml_backend():
     par_graph = ggml_init_params(mem_graph, buf_graph, True)
     ctx_graph = ggml_init(par_graph)
 
-    # create graph
+    # create graph and expand
     gf = ggml_new_graph(ctx_graph)
     c = ggml_mul_mat(ctx_graph, a, b)
     ggml_build_forward_expand(gf, c)
+
+    # free graph context
     ggml_free(ctx_graph)
 
-    # create the worst case graph for memory usage estimation
+    # allocate buffers for graph (worst case scenario)
     buf_type = ggml_backend_get_default_buffer_type(backend)
     allocr = ggml_gallocr_new(buf_type)
     ggml_gallocr_reserve(allocr, gf)
     mem_worst = ggml_gallocr_get_buffer_size(allocr, 0)
     print(f'compute buffer size: {mem_worst/1024:.4f} KB\n')
 
-    # allocate tensors
+    # allocate tensors to buffers for graph
     ggml_gallocr_alloc_graph(allocr, gf)
+
+    # set backend runtime options
     ggml_backend_cpu_set_n_threads(backend, 1)
 
     # set input data
