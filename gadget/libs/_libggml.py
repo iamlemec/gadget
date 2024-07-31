@@ -341,17 +341,19 @@ ggml_gallocr_p = ctypes.POINTER(ggml_gallocr)
 ## functions
 ##
 
-@ctypes_function(_ggml,
-    None,
-    ggml_backend_p
-)
-def ggml_backend_cpu_init(): ...
+## initialization
 
 @ctypes_function(_ggml,
-    None,
-    ggml_backend_p
+    [ggml_init_params],
+    ggml_context_p
 )
-def ggml_backend_free(backend): ...
+def  ggml_init(params): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p],
+    None
+)
+def ggml_free(ctx): ...
 
 @ctypes_function(_ggml,
     [ctypes.c_int],
@@ -371,17 +373,19 @@ def ggml_tensor_overhead(): ...
 )
 def ggml_graph_overhead(): ...
 
-@ctypes_function(_ggml,
-    [ggml_init_params],
-    ggml_context_p
-)
-def  ggml_init(params): ...
+## backend
 
 @ctypes_function(_ggml,
-    [ggml_context_p],
-    None
+    None,
+    ggml_backend_p
 )
-def ggml_free(ctx): ...
+def ggml_backend_cpu_init(): ...
+
+@ctypes_function(_ggml,
+    None,
+    ggml_backend_p
+)
+def ggml_backend_free(backend): ...
 
 @ctypes_function(_ggml,
     [ggml_backend_p],
@@ -407,6 +411,8 @@ def ggml_backend_alloc_ctx_tensors(): ...
 )
 def ggml_backend_graph_compute(backend, cgraph): ...
 
+## allocation
+
 @ctypes_function(_ggml,
     [ggml_backend_buffer_type_p],
     ggml_gallocr_p
@@ -431,28 +437,39 @@ def ggml_gallocr_get_buffer_size(galloc, buffer_id): ...
 )
 def ggml_gallocr_alloc_graph(galloc, graph): ...
 
+## tensors
+
 @ctypes_function(_ggml,
-    [
-        ggml_context_p,
-        ctypes.c_int,
-        ctypes.c_int64,
-        ctypes.c_int64
-    ],
+    [ggml_context_p, ctypes.c_int, ctypes.c_int64],
+    ggml_tensor_p
+)
+def ggml_new_tensor_1d(ctx, type, ne0): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ctypes.c_int, ctypes.c_int64, ctypes.c_int64],
     ggml_tensor_p
 )
 def ggml_new_tensor_2d(ctx, type, ne0, ne1): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ctypes.c_int, ctypes.c_int64, ctypes.c_int64, ctypes.c_int64],
+    ggml_tensor_p
+)
+def ggml_new_tensor_3d(ctx, type, ne0, ne1, ne2): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ctypes.c_int, ctypes.c_int64, ctypes.c_int64, ctypes.c_int64, ctypes.c_int64],
+    ggml_tensor_p
+)
+def ggml_new_tensor_4d(ctx, type, ne0, ne1, ne2, ne3): ...
+
+## graphs
 
 @ctypes_function(_ggml,
     [ggml_context_p],
     ggml_cgraph_p
 )
 def ggml_new_graph(ctx): ...
-
-@ctypes_function(_ggml,
-    [ggml_context_p, ggml_tensor_p, ggml_tensor_p],
-    ggml_tensor_p
-)
-def ggml_mul_mat(ctx, a, b): ...
 
 @ctypes_function(_ggml,
     [ggml_cgraph_p, ggml_tensor_p],
@@ -464,3 +481,845 @@ def ggml_build_forward_expand(cgraph, tensor): ...
     ctypes.c_int
 )
 def ggml_graph_compute_with_ctx(ctx, cgraph, n_threads): ...
+
+## tensor ops
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_dup(ctx, a): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_dup_inplace(ctx, a): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_add(ctx, a, b): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_add_inplace(ctx, a, b): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p, ctypes.c_int],
+    ggml_tensor_p
+)
+def ggml_add_cast(ctx, a, b, type): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_add1(ctx, a, b): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_add1_inplace(ctx, a, b): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p, ctypes.c_size_t, ctypes.c_size_t, ctypes.c_size_t, ctypes.c_size_t],
+    ggml_tensor_p
+)
+def ggml_acc(ctx, a, b, nb1, nb2, nb3, offset): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p, ctypes.c_size_t, ctypes.c_size_t, ctypes.c_size_t, ctypes.c_size_t],
+    ggml_tensor_p
+)
+def ggml_acc_inplace(ctx, a, b, nb1, nb2, nb3, offset): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_sub(ctx, a, b): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_sub_inplace(ctx, a, b): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_mul(ctx, a, b): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_mul_inplace(ctx, a, b): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_div(ctx, a, b): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_div_inplace(ctx, a, b): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_sqr(ctx, a): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_sqr_inplace(ctx, a): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_sqrt(ctx, a): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_sqrt_inplace(ctx, a): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_log(ctx, a): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_log_inplace(ctx, a): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_sum(ctx, a): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_sum_rows(ctx, a): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_mean(ctx, a): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_argmax(ctx, a): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_repeat(ctx, a, b): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_repeat_back(ctx, a, b): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p, ctypes.c_int],
+    ggml_tensor_p
+)
+def ggml_concat(ctx, a, b, dim): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_abs(ctx, a): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_abs_inplace(ctx, a): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_sgn(ctx, a): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_sgn_inplace(ctx, a): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_neg(ctx, a): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_neg_inplace(ctx, a): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_step(ctx, a): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_step_inplace(ctx, a): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_tanh(ctx, a): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_tanh_inplace(ctx, a): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_elu(ctx, a): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_elu_inplace(ctx, a): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_relu(ctx, a): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ctypes.c_float, ctypes.c_bool],
+    ggml_tensor_p
+)
+def ggml_leaky_relu(ctx, a, negative_slope, inplace): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_relu_inplace(ctx, a): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_sigmoid(ctx, a): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_sigmoid_inplace(ctx, a): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_gelu(ctx, a): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_gelu_inplace(ctx, a): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_gelu_quick(ctx, a): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_gelu_quick_inplace(ctx, a): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_silu(ctx, a): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_silu_inplace(ctx, a): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_silu_back(ctx, a, b): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_hardswish(ctx, a): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_hardsigmoid(ctx, a): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ctypes.c_float],
+    ggml_tensor_p
+)
+def ggml_norm(ctx, a, eps): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ctypes.c_float],
+    ggml_tensor_p
+)
+def ggml_norm_inplace(ctx, a, eps): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ctypes.c_float],
+    ggml_tensor_p
+)
+def ggml_rms_norm(ctx, a, eps): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ctypes.c_float],
+    ggml_tensor_p
+)
+def ggml_rms_norm_inplace(ctx, a, eps): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ctypes.c_int],
+    ggml_tensor_p
+)
+def ggml_group_norm(ctx, a, n_groups): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ctypes.c_int],
+    ggml_tensor_p
+)
+def ggml_group_norm_inplace(ctx, a, n_groups): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p, ctypes.c_float],
+    ggml_tensor_p
+)
+def ggml_rms_norm_back(ctx, a, b, eps): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_mul_mat(ctx, a, b): ...
+
+@ctypes_function(_ggml,
+    [ggml_tensor_p, ctypes.c_int],
+    None
+)
+def ggml_mul_mat_set_prec(a, prec): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_mul_mat_id(ctx, as_, b, ids): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_out_prod(ctx, a, b): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ctypes.c_float],
+    ggml_tensor_p
+)
+def ggml_scale(ctx, a, s): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ctypes.c_float],
+    ggml_tensor_p
+)
+def ggml_scale_inplace(ctx, a, s): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p, ctypes.c_size_t, ctypes.c_size_t, ctypes.c_size_t, ctypes.c_size_t],
+    ggml_tensor_p
+)
+def ggml_set(ctx, a, b, nb1, nb2, nb3, offset): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p, ctypes.c_size_t, ctypes.c_size_t, ctypes.c_size_t, ctypes.c_size_t],
+    ggml_tensor_p
+)
+def ggml_set_inplace(ctx, a, b, nb1, nb2, nb3, offset): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p, ctypes.c_size_t],
+    ggml_tensor_p
+)
+def ggml_set_1d(ctx, a, b, offset): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p, ctypes.c_size_t],
+    ggml_tensor_p
+)
+def ggml_set_1d_inplace(ctx, a, b, offset): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p, ctypes.c_size_t, ctypes.c_size_t],
+    ggml_tensor_p
+)
+def ggml_set_2d(ctx, a, b, nb1, offset): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p, ctypes.c_size_t, ctypes.c_size_t],
+    ggml_tensor_p
+)
+def ggml_set_2d_inplace(ctx, a, b, nb1, offset): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_cpy(ctx, a, b): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ctypes.c_int],
+    ggml_tensor_p
+)
+def ggml_cast(ctx, a, type): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_cont(ctx, a): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ctypes.c_int64],
+    ggml_tensor_p
+)
+def ggml_cont_1d(ctx, a, ne0): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ctypes.c_int64, ctypes.c_int64],
+    ggml_tensor_p
+)
+def ggml_cont_2d(ctx, a, ne0, ne1): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ctypes.c_int64, ctypes.c_int64, ctypes.c_int64],
+    ggml_tensor_p
+)
+def ggml_cont_3d(ctx, a, ne0, ne1, ne2): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ctypes.c_int64, ctypes.c_int64, ctypes.c_int64, ctypes.c_int64],
+    ggml_tensor_p
+)
+def ggml_cont_4d(ctx, a, ne0, ne1, ne2, ne3): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_reshape(ctx, a, b): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ctypes.c_int64],
+    ggml_tensor_p
+)
+def ggml_reshape_1d(ctx, a, ne0): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ctypes.c_int64, ctypes.c_int64],
+    ggml_tensor_p
+)
+def ggml_reshape_2d(ctx, a, ne0, ne1): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ctypes.c_int64, ctypes.c_int64, ctypes.c_int64],
+    ggml_tensor_p
+)
+def ggml_reshape_3d(ctx, a, ne0, ne1, ne2): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ctypes.c_int64, ctypes.c_int64, ctypes.c_int64, ctypes.c_int64],
+    ggml_tensor_p
+)
+def ggml_reshape_4d(ctx, a, ne0, ne1, ne2, ne3): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ctypes.c_int64, ctypes.c_size_t],
+    ggml_tensor_p
+)
+def ggml_view_1d(ctx, a, ne0, offset): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ctypes.c_int64, ctypes.c_int64, ctypes.c_size_t, ctypes.c_size_t],
+    ggml_tensor_p
+)
+def ggml_view_2d(ctx, a, ne0, ne1, nb1, offset): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ctypes.c_int64, ctypes.c_int64, ctypes.c_int64, ctypes.c_size_t, ctypes.c_size_t, ctypes.c_size_t],
+    ggml_tensor_p
+)
+def ggml_view_3d(ctx, a, ne0, ne1, ne2, nb1, nb2, offset): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ctypes.c_int64, ctypes.c_int64, ctypes.c_int64, ctypes.c_int64, ctypes.c_size_t, ctypes.c_size_t, ctypes.c_size_t, ctypes.c_size_t],
+    ggml_tensor_p
+)
+def ggml_view_4d(ctx, a, ne0, ne1, ne2, ne3, nb1, nb2, nb3, offset): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int],
+    ggml_tensor_p
+)
+def ggml_permute(ctx, a, axis0, axis1, axis2, axis3): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_transpose(ctx, a): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_get_rows(ctx, a, b): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_get_rows_back(ctx, a, b, c): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_diag(ctx, a): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ctypes.c_int],
+    ggml_tensor_p
+)
+def ggml_diag_mask_inf(ctx, a, n_past): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ctypes.c_int],
+    ggml_tensor_p
+)
+def ggml_diag_mask_inf_inplace(ctx, a, n_past): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ctypes.c_int],
+    ggml_tensor_p
+)
+def ggml_diag_mask_zero(ctx, a, n_past): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ctypes.c_int],
+    ggml_tensor_p
+)
+def ggml_diag_mask_zero_inplace(ctx, a, n_past): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_soft_max(ctx, a): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_soft_max_inplace(ctx, a): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p, ctypes.c_float, ctypes.c_float],
+    ggml_tensor_p
+)
+def ggml_soft_max_ext(ctx, a, mask, scale, max_bias): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_soft_max_back(ctx, a, b): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_soft_max_back_inplace(ctx, a, b): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p, ctypes.c_int, ctypes.c_int],
+    ggml_tensor_p
+)
+def ggml_rope(ctx, a, b, n_dims, mode): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p, ctypes.c_int, ctypes.c_int],
+    ggml_tensor_p
+)
+def ggml_rope_inplace(ctx, a, b, n_dims, mode): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p, ggml_tensor_p, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_float, ctypes.c_float, ctypes.c_float, ctypes.c_float, ctypes.c_float, ctypes.c_float],
+    ggml_tensor_p
+)
+def ggml_rope_ext(ctx, a, b, c, n_dims, mode, n_ctx_orig, freq_base, freq_scale, ext_factor, attn_factor, beta_fast, beta_slow): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p, ggml_tensor_p, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_float, ctypes.c_float, ctypes.c_float, ctypes.c_float, ctypes.c_float, ctypes.c_float],
+    ggml_tensor_p
+)
+def ggml_rope_ext_inplace(ctx, a, b, c, n_dims, mode, n_ctx_orig, freq_base, freq_scale, ext_factor, attn_factor, beta_fast, beta_slow): ...
+
+@ctypes_function(_ggml,
+    [ctypes.c_int, ctypes.c_int, ctypes.c_float, ctypes.c_float, ctypes.c_float, ctypes.POINTER(ctypes.c_float)],
+    None
+)
+def ggml_rope_yarn_corr_dims(n_dims, n_ctx_orig, freq_base, beta_fast, beta_slow, dims): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p, ggml_tensor_p, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_float, ctypes.c_float, ctypes.c_float, ctypes.c_float, ctypes.c_float, ctypes.c_float],
+    ggml_tensor_p
+)
+def ggml_rope_back(ctx, a, b, c, n_dims, mode, n_ctx_orig, freq_base, freq_scale, ext_factor, attn_factor, beta_fast, beta_slow): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ctypes.c_float, ctypes.c_float],
+    ggml_tensor_p
+)
+def ggml_clamp(ctx, a, min, max): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_bool, ctypes.c_int],
+    ggml_tensor_p
+)
+def ggml_im2col(ctx, a, b, s0, s1, p0, p1, d0, d1, is_2D, dst_type): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int],
+    ggml_tensor_p
+)
+def ggml_conv_depthwise_2d(ctx, a, b, s0, s1, p0, p1, d0, d1): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p, ctypes.c_int, ctypes.c_int, ctypes.c_int],
+    ggml_tensor_p
+)
+def ggml_conv_1d(ctx, a, b, s0, p0, d0): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p, ctypes.c_int, ctypes.c_int],
+    ggml_tensor_p
+)
+def ggml_conv_1d_ph(ctx, a, b, s, d): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p, ctypes.c_int, ctypes.c_int, ctypes.c_int],
+    ggml_tensor_p
+)
+def ggml_conv_transpose_1d(ctx, a, b, s0, p0, d0): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int],
+    ggml_tensor_p
+)
+def ggml_conv_2d(ctx, a, b, s0, s1, p0, p1, d0, d1): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_conv_2d_sk_p0(ctx, a, b): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_conv_2d_s1_ph(ctx, a, b): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p, ctypes.c_int],
+    ggml_tensor_p
+)
+def ggml_conv_transpose_2d_p0(ctx, a, b, stride): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int],
+    ggml_tensor_p
+)
+def ggml_pool_1d(ctx, a, op, k0, s0, p0): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_float, ctypes.c_float],
+    ggml_tensor_p
+)
+def ggml_pool_2d(ctx, a, op, k0, k1, s0, s1, p0, p1): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ctypes.c_int],
+    ggml_tensor_p
+)
+def ggml_upscale(ctx, a, scale_factor): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int],
+    ggml_tensor_p
+)
+def ggml_upscale_ext(ctx, a, ne0, ne1, ne2, ne3): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int],
+    ggml_tensor_p
+)
+def ggml_pad(ctx, a, p0, p1, p2, p3): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ctypes.c_int, ctypes.c_int],
+    ggml_tensor_p
+)
+def ggml_timestep_embedding(ctx, timesteps, dim, max_period): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ctypes.c_int],
+    ggml_tensor_p
+)
+def ggml_argsort(ctx, a, order): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ctypes.c_float, ctypes.c_float, ctypes.c_float],
+    ggml_tensor_p
+)
+def ggml_arange(ctx, start, stop, step): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ctypes.c_int],
+    ggml_tensor_p
+)
+def ggml_top_k(ctx, a, k): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p, ggml_tensor_p, ggml_tensor_p, ctypes.c_float, ctypes.c_float],
+    ggml_tensor_p
+)
+def ggml_flash_attn_ext(ctx, q, k, v, mask, scale, max_bias): ...
+
+@ctypes_function(_ggml,
+    [ggml_tensor_p, ctypes.c_int],
+    None
+)
+def ggml_flash_attn_ext_set_prec(a, prec): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p, ggml_tensor_p, ggml_tensor_p, ctypes.c_bool],
+    ggml_tensor_p
+)
+def ggml_flash_attn_back(ctx, q, k, v, d, masked): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p, ggml_tensor_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_ssm_conv(ctx, s, x, c, sq): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p, ggml_tensor_p, ggml_tensor_p, ggml_tensor_p, ggml_tensor_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_ssm_scan(ctx, s, x, dt, A, B, C, sq): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ctypes.c_int],
+    ggml_tensor_p
+)
+def ggml_win_part(ctx, a, w): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ctypes.c_int, ctypes.c_int, ctypes.c_int],
+    ggml_tensor_p
+)
+def ggml_win_unpart(ctx, a, w0, h0, w): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ctypes.c_int],
+    ggml_tensor_p
+)
+def ggml_unary(ctx, a, op): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ctypes.c_int],
+    ggml_tensor_p
+)
+def ggml_unary_inplace(ctx, a, op): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ctypes.c_int, ctypes.c_int],
+    ggml_tensor_p
+)
+def ggml_get_rel_pos(ctx, a, qh, kh): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_add_rel_pos(ctx, a, pw, ph): ...
+
+@ctypes_function(_ggml,
+    [ggml_context_p, ggml_tensor_p, ggml_tensor_p, ggml_tensor_p],
+    ggml_tensor_p
+)
+def ggml_add_rel_pos_inplace(ctx, a, pw, ph): ...

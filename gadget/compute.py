@@ -138,12 +138,13 @@ class GgmlModel:
         # return results
         return out_np
 
-def test_model(ctx_graph, inputs):
-    a, b = inputs['a'], inputs['b']
-    c = ggml_mul_mat(ctx_graph, a, b)
-    return c
-
 def test_compute():
+    # simple multiply model
+    def test_model(ctx_graph, inputs):
+        a, b = inputs['a'], inputs['b']
+        c = ggml_mul_mat(ctx_graph, a, b)
+        return c
+
     # define inputs: type, (col, row)
     spec = {
         'a': (GGML_TYPE_F32, (2, 4)),
