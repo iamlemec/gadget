@@ -3,6 +3,7 @@
 import ctypes
 import numpy as np
 
+from .constants import GGMLQuantizationType
 from .ggml import (
     ggml_type_size, ggml_tensor_overhead, ggml_graph_overhead,
     ggml_init_params, ggml_init, ggml_new_tensor_2d, ggml_mul_mat,
@@ -10,11 +11,11 @@ from .ggml import (
     ggml_backend_cpu_init, ggml_backend_free, ggml_backend_alloc_ctx_tensors, ggml_free,
     ggml_backend_get_default_buffer_type, ggml_gallocr_new, ggml_gallocr_reserve,
     ggml_gallocr_get_buffer_size, ggml_gallocr_alloc_graph, ggml_backend_cpu_set_n_threads,
-    ggml_backend_graph_compute, GGML_TYPE_F32, GGML_DEFAULT_GRAPH_SIZE
+    ggml_backend_graph_compute, GGML_DEFAULT_GRAPH_SIZE
 )
 
 gtype_to_ctype = {
-    GGML_TYPE_F32: ctypes.c_float,
+    GGMLQuantizationType.F32: ctypes.c_float,
 }
 
 def tensor_to_numpy(tensor, dims=2):
@@ -45,6 +46,22 @@ def create_graph_context(graph_size=GGML_DEFAULT_GRAPH_SIZE):
 
     # return context
     return ctx_graph
+
+def create_tensor(ctx, typ, shp):
+    if len(shp) == 1:
+        ne1, = shp
+        return ggml_new_tensor_1d(ctx, typ, ne1)
+    elif len(shp) == 2:
+        ne1, ne2 = shp
+        return ggml_new_tensor_2d(ctx, typ, ne1, ne2)
+    elif len(shp) == 3:
+        ne1, ne2, ne3 = shp
+        return ggml_new_tensor_3d(ctx, typ, ne1, ne2, ne3)
+    elif len(shp) == 4:
+        ne1, ne2, ne3, ne4 = shp
+        return ggml_new_tensor_4d(ctx, typ, ne1, ne2, ne3, ne4)
+    else:
+        raise ValueError(f'unsupported shape: {shp}')
 
 class GgmlModel:
     def __init__(self, specs, model, backend=None):
@@ -85,7 +102,7 @@ class GgmlModel:
 
         # create tensors
         self.inputs = {
-            nam: ggml_new_tensor_2d(self.tensors, typ, *shp)
+            nam: create_tensor(self.tensors, typ, shp)
             for nam, (typ, shp) in specs.items()
         }
 
@@ -140,15 +157,15 @@ class GgmlModel:
 
 def test_compute():
     # simple multiply model
-    def test_model(ctx_graph, inputs):
+    def test_model(ctx, inputs):
         a, b = inputs['a'], inputs['b']
-        c = ggml_mul_mat(ctx_graph, a, b)
+        c = ggml_mul_mat(ctx, a, b)
         return c
 
-    # define inputs: type, (col, row)
+    # define inputs: type, shape (col, row)
     spec = {
-        'a': (GGML_TYPE_F32, (2, 4)),
-        'b': (GGML_TYPE_F32, (2, 3)),
+        'a': (GGMLQuantizationType.F32, (2, 4)),
+        'b': (GGMLQuantizationType.F32, (2, 3)),
     }
 
     # define input data
