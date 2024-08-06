@@ -238,14 +238,25 @@ class GgufModel:
             writer.write_array(tensor)
 
     def __repr__(self):
-        width = max([len(f) for f in self.fields])
+        width = max(
+            [len(f) for f in self.fields ] +
+            [len(t) for t in self.tensors]
+        )
         max_length = 8
-        lines = []
+        lines = ['FIELDS']
         for key, value in self.fields.items():
-            if isinstance(value, list):
+            if type(value) is np.ndarray:
+                value = value.tolist()
+            if type(value) is list:
                 prev = ' , '.join(map(str, value[:max_length]))
-                value = f'[ {len(value)} ] → ( {prev} , ... )'
+                if len(value) > max_length:
+                    value = f'[ {prev} , ... ] ({len(value)})'
+                else:
+                    value = f'[ {prev} ] ({len(value)})'
             lines.append(f'{key:{width}} = {value}')
+        lines += ['', 'TENSORS']
+        for key, (ttype, tensor) in self.tensors.items():
+            lines.append(f'{key:{width}} = {ttype.name} {tensor.shape}')
         return '\n'.join(lines)
 
     def base_size(self):
@@ -290,11 +301,13 @@ class GgufModel:
         return self.fields.get(name)
 
     def set_field(self, name, value, dtype=None):
-        if type(value) is not np.ndarray:
+        if type(value) is list and set(map(type, value)) == {str}:
+            pass
+        elif type(value) is not np.ndarray:
             if dtype is None:
-                dtype = np.dtype(type(value))
+                raise ValueError(f'Must specify dtype for non-ndarray fields')
             value = np.array(value, dtype=dtype)
-        if value.ndim > 1:
+        if type(value) is np.ndarray and value.ndim > 1:
             raise ValueError(f'Fields must be 0- or 1-dimensional arrays')
         self.fields[name] = value
 
@@ -330,3 +343,15 @@ class GgufModel:
         size = self.read_uint64()
         data = self.read(np.uint8, size)
         return data.tobytes().decode('utf-8')
+
+def test_model():
+    # make data
+    data = np.arange(12).reshape((3, 4))
+
+    # create model
+    gf = GgufModel()
+    gf.set_field('name', 'test')
+    gf.set_field('value', 42)
+    gf.set_tensor('data', data)
+
+    return gf
