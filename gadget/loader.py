@@ -27,7 +27,7 @@ type_to_gtype = {v: k for k, v in gtype_to_type.items()}
 dtype_to_gtype = {v: k for k, v in gtype_to_dtype.items()}
 
 # map for tensor types (missing bfloat16)
-ttype_to_dtype = {
+ttype_to_type = {
     GGMLQuantizationType.F16    : np.float16,
     GGMLQuantizationType.F32    : np.float32,
     GGMLQuantizationType.F64    : np.float64,
@@ -56,6 +56,7 @@ ttype_to_dtype = {
     GGMLQuantizationType.IQ4_XS : np.uint8  ,
     GGMLQuantizationType.IQ1_M  : np.uint8  ,
 }
+ttype_to_dtype = {k: np.dtype(v) for k, v in ttype_to_type.items()}
 
 # map for tensor types (unquantized only)
 type_to_ttype = {
@@ -69,6 +70,10 @@ type_to_ttype = {
 }
 dtype_to_ttype = {np.dtype(k): v for k, v in type_to_ttype.items()}
 
+# test for string list
+def is_string_list(value):
+    return type(value) is list and set(map(type, value)) == {bytes}
+
 class MmapWriter:
     def __init__(self, fname, size):
         self.data = np.memmap(fname, mode='w+', shape=(size,))
@@ -79,7 +84,7 @@ class MmapWriter:
 
     def write_array(self, data):
         off, size = self.offset, data.nbytes
-        self.data[off:off+size] = data.view(np.uint8)
+        self.data[off:off+size] = data.reshape(-1).view(np.uint8)
         self.offset += size
 
     def write_scalar(self, value, dtype):
@@ -92,10 +97,13 @@ class MmapWriter:
     def write_uint64(self, value):
         self.write_scalar(value, np.uint64)
 
-    def write_str(self, value):
-        data = value.encode('utf-8')
+    def write_string(self, data):
         self.write_scalar(len(data), np.uint64)
         self.write_array(np.frombuffer(data, dtype=np.uint8))
+
+    def write_unicode(self, data):
+        string = data.encode('utf-8')
+        self.write_string(string)
 
 class GgufModel:
     def __init__(self):
@@ -126,12 +134,12 @@ class GgufModel:
         self.fields = {}
         for _ in range(n_fields):
             # get metadata
-            name = self.read_str()
+            name = self.read_unicode()
             gtype = self.read_uint32()
 
             # parse value by gtype
             if gtype == GGUFValueType.STRING:
-                value = self.read_str()
+                value = self.read_string()
             elif gtype in gtype_to_dtype:
                 dtype = gtype_to_dtype[gtype]
                 value = self.read_scalar(dtype)
@@ -139,7 +147,7 @@ class GgufModel:
                 itype = self.read_uint32()
                 size = self.read_uint64()
                 if itype == GGUFValueType.STRING:
-                    value = [self.read_str() for _ in range(size)]
+                    value = [self.read_string() for _ in range(size)]
                 elif itype in gtype_to_dtype:
                     dtype = gtype_to_dtype.get(itype)
                     value = np.array(self.read(dtype, size))
@@ -154,18 +162,24 @@ class GgufModel:
         # read tensor metadata
         metadata = {}
         for _ in range(n_tensors):
-            name = self.read_str()
+            name = self.read_unicode()
             dims = self.read_uint32()
             shape = tuple(map(int, self.read(np.uint64, dims).tolist()))
             ttype = GGMLQuantizationType(self.read_uint32())
             offset = self.read_uint64()
             metadata[name] = shape, ttype, offset
 
+        # jump to alignment
+        tensor_base = self.offset
+        alignment = self.get_field('general.alignment', GGUF_DEFAULT_ALIGNMENT)
+        if alignment != 0 and (padding := self.offset % alignment) != 0:
+            tensor_base += alignment - padding
+
         # read weights
         self.tensors = {}
         for name, (shape, ttype, offset) in metadata.items():
-            self.offset = offset
-            dtype = ttype_to_dtype[ttype]
+            self.offset = tensor_base + offset
+            dtype = ttype_to_type[ttype]
             count = np.prod(shape)
             vals = self.read(dtype, count=count)
             self.tensors[name] = ttype, vals.reshape(shape)
@@ -174,8 +188,11 @@ class GgufModel:
         return self
 
     def save(self, fname):
+        # get total gguf size
+        alignment = self.get_field('general.alignment', GGUF_DEFAULT_ALIGNMENT)
+        gguf_size = self.gguf_size(alignment)
+
         # create output file
-        gguf_size = self.gguf_size()
         writer = MmapWriter(fname, gguf_size)
 
         # write magic
@@ -191,38 +208,37 @@ class GgufModel:
         # write fields
         for name, value in self.fields.items():
             # write name
-            writer.write_str(name)
+            writer.write_unicode(name)
 
             # write value (no subclassing allowed)
             vtype = type(value)
-            if vtype is str:
+            if vtype is bytes:
                 writer.write_uint32(GGUFValueType.STRING)
-                writer.write_str(value)
-            elif vtype is np.ndarray:
-                dtype = value.dtype
-                gtype = dtype_to_gtype[dtype]
-                if value.ndim == 0:
-                    writer.write_uint32(gtype)
-                    writer.write_scalar(value, dtype)
-                elif value.ndim == 1:
-                    writer.write_uint32(GGUFValueType.ARRAY)
-                    writer.write_uint32(gtype)
-                    writer.write_uint64(len(value))
-                    if itype is str:
-                        for item in value:
-                            writer.write_str(item)
-                    else:
-                        writer.write_array(value)
-                else:
-                    raise ValueError(f'Fields must be 0- or 1-dimensional arrays')
-
-        # get tensor starting offset
-        offset = self.base_size() + self.field_size() + self.meta_size()
+                writer.write_string(value)
+            elif is_string_list(value):
+                writer.write_uint32(GGUFValueType.ARRAY)
+                writer.write_uint32(GGUFValueType.STRING)
+                writer.write_uint64(len(value))
+                for item in value:
+                    writer.write_string(item)
+            elif vtype in type_to_gtype:
+                gtype = type_to_gtype[vtype]
+                writer.write_uint32(gtype)
+                writer.write_scalar(value, value.dtype)
+            elif vtype is np.ndarray and value.ndim == 1:
+                gtype = dtype_to_gtype[value.dtype]
+                writer.write_uint32(GGUFValueType.ARRAY)
+                writer.write_uint32(gtype)
+                writer.write_uint64(len(value))
+                writer.write_array(value)
+            else:
+                raise ValueError(f'Fields must be string, list of strings, scalar, or 1-dimensional array')
 
         # write tensor metadata
+        offset = 0
         for name, (ttype, tensor) in self.tensors.items():
             shape = tensor.shape
-            writer.write_str(name)
+            writer.write_unicode(name)
             writer.write_uint32(len(shape))
             writer.write_array(np.array(shape, dtype=np.uint64))
             writer.write_uint32(ttype)
@@ -230,8 +246,12 @@ class GgufModel:
 
             # update offset
             count = np.prod(shape)
-            width = np.dtype(ttype_to_dtype[ttype]).itemsize
+            width = ttype_to_dtype[ttype].itemsize
             offset += count * width
+
+        # pad to alignment for tensor data
+        if alignment != 0 and (padding := writer.offset % alignment) != 0:
+            writer.offset += alignment - padding
 
         # write weights
         for ttype, tensor in self.tensors.values():
@@ -245,18 +265,32 @@ class GgufModel:
         max_length = 8
         lines = ['FIELDS']
         for key, value in self.fields.items():
-            if type(value) is np.ndarray:
-                value = value.tolist()
-            if type(value) is list:
-                prev = ' , '.join(map(str, value[:max_length]))
-                if len(value) > max_length:
-                    value = f'[ {prev} , ... ] ({len(value)})'
+            vtype = type(value)
+            if vtype is bytes:
+                value = value.decode('utf-8', errors='replace')
+            if is_string_list(value) or vtype is np.ndarray:
+                if vtype is np.ndarray:
+                    typen = dtype_to_gtype[value.dtype].name
+                    elems = value.tolist()
                 else:
-                    value = f'[ {prev} ] ({len(value)})'
-            lines.append(f'{key:{width}} = {value}')
+                    typen = 'STRING'
+                    elems = [s.decode('utf-8', errors='replace') for s in value]
+                n_vals = len(elems)
+                if n_vals > max_length:
+                    elems = elems[:max_length] + ['...']
+                prev = ' , '.join(map(str, elems))
+                value = f'[ {prev} ] ({typen} × {n_vals})'
+                line = f'{key:{width}} = {value}'
+            else:
+                if vtype is bytes:
+                    typen = 'STRING'
+                else:
+                    typen = type_to_gtype[vtype].name
+                line = f'{key:{width}} = {value} ({typen})'
+            lines.append(line)
         lines += ['', 'TENSORS']
         for key, (ttype, tensor) in self.tensors.items():
-            lines.append(f'{key:{width}} = {ttype.name} {tensor.shape}')
+            lines.append(f'{key:{width}} = {ttype.name} × {tensor.shape}')
         return '\n'.join(lines)
 
     def base_size(self):
@@ -268,14 +302,15 @@ class GgufModel:
         base = 8 + len(name) # length + name
         value = self.fields[name]
         vtype = type(value)
-        if vtype is str:
+        if vtype is bytes:
             data = 4 + 8 + len(value) # type + length + string
+        elif is_string_list(value):
+            data = 4 + 4 + 8 + sum(8 + len(s) for s in value)
+        elif vtype in type_to_gtype:
+            width = value.dtype.itemsize
+            data = 4 + width
         elif vtype is np.ndarray:
-            if value.ndim == 0:
-                width = np.dtype(value.dtype).itemsize
-                data = 4 + width # type + scalar
-            else:
-                data = 4 + 4 + 8 + value.nbytes # type + ttype + size + array
+            data = 4 + 4 + 8 + value.nbytes # type + ttype + size + array
         else:
             raise ValueError(f'Invalid field type: {vtype}')
         return base + data
@@ -294,21 +329,30 @@ class GgufModel:
         ttype, tensor = self.tensors[name]
         return tensor.nbytes
 
-    def gguf_size(self):
-        return self.base_size() + self.field_size() + self.meta_size() + self.tensor_size()
+    def header_size(self):
+        return self.base_size() + self.field_size() + self.meta_size()
 
-    def get_field(self, name):
-        return self.fields.get(name)
+    # this accounts for alignment of tensor data
+    def gguf_size(self, alignment):
+        total = self.header_size()
+        if (padding := total % alignment) != 0:
+            total += alignment - padding
+        total += self.tensor_size()
+        return total
 
-    def set_field(self, name, value, dtype=None):
-        if type(value) is list and set(map(type, value)) == {str}:
-            pass
-        elif type(value) is not np.ndarray:
-            if dtype is None:
-                raise ValueError(f'Must specify dtype for non-ndarray fields')
-            value = np.array(value, dtype=dtype)
-        if type(value) is np.ndarray and value.ndim > 1:
-            raise ValueError(f'Fields must be 0- or 1-dimensional arrays')
+    def get_field(self, name, default=None):
+        return self.fields.get(name, default)
+
+    def set_field(self, name, value):
+        vtype = type(value)
+        if vtype is bytes or is_string_list(value):
+            pass # string or list of strings
+        elif vtype in type_to_gtype or (vtype is np.ndarray and value.dtype in dtype_to_gtype):
+            pass # numpy scalar or numpy array
+        else:
+            raise ValueError(f'Value must be string, list of strings, numpy scalar, or numpy array')
+        if vtype is np.ndarray and value.ndim > 1:
+            raise ValueError(f'Array fields must be 0- or 1-dimensional arrays')
         self.fields[name] = value
 
     def set_tensor(self, name, value, ttype=None):
@@ -339,10 +383,13 @@ class GgufModel:
     def read_uint64(self):
         return int(self.read_scalar(np.uint64))
 
-    def read_str(self):
+    def read_string(self):
         size = self.read_uint64()
         data = self.read(np.uint8, size)
-        return data.tobytes().decode('utf-8')
+        return data.tobytes()
+
+    def read_unicode(self):
+        return self.read_string().decode('utf-8')
 
 def test_model():
     # make data
@@ -351,7 +398,7 @@ def test_model():
     # create model
     gf = GgufModel()
     gf.set_field('name', 'test')
-    gf.set_field('value', 42)
+    gf.set_field('value', np.uint32(42))
     gf.set_tensor('data', data)
 
     return gf
