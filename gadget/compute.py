@@ -80,12 +80,23 @@ def create_tensor(ctx, typ, shp, nam=None):
         ggml_set_name(tensor, nam.encode('utf-8'))
     return tensor
 
+def trim_shape(shape):
+    dims = 1 + max([
+        i for i, d in enumerate(shape) if d > 1
+    ], default=0)
+    return shape[:dims]
+
+def get_tensor_shape(tensor):
+    value = tensor.contents
+    shape = tuple(value.ne[:4])
+    return trim_shape(shape)
+
 def get_tensor_info(tensor):
     value = tensor.contents
     name = value.name.decode('utf-8')
     ttype = GGMLQuantizationType(value.type)
-    shape = tuple(value.ne[:4])
-    stat = f'{name}: {ttype.name} × {shape}'
+    shape = trim_shape(tuple(value.ne[:4]))
+    stat = f'{name}: {ttype.name} × {shape[::-1]}'
     return stat
 
 def set_tensor_name(tensor, name):
@@ -168,25 +179,6 @@ class GgmlCompute:
         ggml_gallocr_reserve(allocr, self.graph)
         ggml_gallocr_alloc_graph(allocr, self.graph)
 
-    def print_inputs(self):
-        for name, tensor in self.inputs.items():
-            get_tensor_info(tensor)
-
-    def print_graph(self):
-        n_nodes = self.graph.contents.n_nodes
-        for i in range(n_nodes):
-            tensor = self.graph.contents.nodes[i]
-            print(get_tensor_info(tensor))
-
-    def __repr__(self):
-        graph = self.graph.contents
-        lines = (
-            [f'GgmlCompute(backend={self.backend_name})'] + ['', 'INPUTS'] +
-            [get_tensor_info(tensor) for tensor in self.inputs.values()] + ['', 'GRAPH'] +
-            [get_tensor_info(graph.nodes[i]) for i in range(graph.n_nodes)]
-        )
-        return '\n'.join(lines)
-
     def compute(self, **values):
         # set input values
         for name, value in values.items():
@@ -202,6 +194,19 @@ class GgmlCompute:
 
         # return results
         return out_np
+
+    def __repr__(self):
+        name = self.__class__.__name__
+        graph = self.graph.contents
+        lines = (
+            [f'{name}(backend={self.backend_name})'] + ['', 'INPUTS'] +
+            [get_tensor_info(tensor) for tensor in self.inputs.values()] + ['', 'GRAPH'] +
+            [get_tensor_info(graph.nodes[i]) for i in range(graph.n_nodes)]
+        )
+        return '\n'.join(lines)
+
+    def __call__(self, **values):
+        return self.compute(**values)
 
 def test_compute():
     # define inputs: name -> (type, shape)

@@ -5,7 +5,7 @@ import numpy as np
 from .constants import GGMLQuantizationType
 from .ggml import ggml_mul_mat, ggml_add
 from .loader import GgufFile
-from .compute import GgmlCompute, get_tensor_info, set_tensor_name
+from .compute import GgmlCompute, set_tensor_name
 
 class GgmlModel(GgmlCompute):
     def __init__(self, params, inputs, model, backend=None):
@@ -33,8 +33,8 @@ class GgmlModel(GgmlCompute):
         return self
 
     @classmethod
-    def from_file(cls, filename, inputs, model, backend=None):
-        gguf = GgufFile.from_file(filename)
+    def from_path(cls, path, inputs, model, backend=None):
+        gguf = GgufFile.from_file(path)
         return cls.from_gguf(gguf, inputs, model, backend=backend)
 
     def set_params(self, values):
@@ -62,18 +62,18 @@ def test_model():
         x = (GGMLQuantizationType.F32, (batch_size, input_dim)),
     )
 
-    # model function (comments are ggml shapes)
+    # model function (comments are numpy shapes)
     def forward(ctx, inputs):
         # load params
-        weight = inputs['weight'] # [input_dim, output_dim]
+        weight = inputs['weight'] # [output_dim, input_dim]
         bias = inputs['bias'] # [output_dim]
 
         # load inputs
-        x = inputs['x'] # [input_dim, batch_size]
+        x = inputs['x'] # [batch_size, input_dim]
 
         # do computation
-        a = ggml_mul_mat(ctx, weight, x) # [output_dim, batch_size]
-        b = ggml_add(ctx, a, bias) # [output_dim, batch_size]
+        a = ggml_mul_mat(ctx, weight, x) # [batch_size, output_dim]
+        b = ggml_add(ctx, a, bias) # [batch_size, output_dim]
 
         # set tensor names
         set_tensor_name(a, 'a')
@@ -84,12 +84,14 @@ def test_model():
 
     # load model (this sets params)
     model = GgmlModel.from_gguf(gguf, inputs, forward)
-    print(model)
 
     # compute on input data
     x = np.ones((batch_size, input_dim), dtype=np.float32)
-    y = model.compute(x=x)
+    y = model(x=x)
 
     # test results
     y0 = (weight @ x.T + bias[:,None]).T
     assert np.allclose(y, y0)
+
+    # return model
+    return model

@@ -111,11 +111,11 @@ class GgufFile:
         self.tensors = {}
 
     @classmethod
-    def from_file(cls, fname, **kwargs):
+    def from_path(cls, path, **kwargs):
         self = cls(**kwargs)
     
         # load model from file
-        self.data = np.memmap(fname, mode='r')
+        self.data = np.memmap(path, mode='r')
         self.offset = 0
 
         # check magic
@@ -292,7 +292,7 @@ class GgufFile:
             lines.append(line)
         lines += ['', 'TENSORS']
         for key, (ttype, tensor) in self.tensors.items():
-            lines.append(f'{key:{width}} = {ttype.name} × {tensor.shape}')
+            lines.append(f'{key:{width}} = {ttype.name} × {tensor.shape[::-1]}')
         return '\n'.join(lines)
 
     def base_size(self):
