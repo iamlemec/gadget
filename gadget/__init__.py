@@ -8,8 +8,9 @@ from .llama import (
     LLAMA_POOLING_TYPE_LAST,
 )
 
-from .loader import GgufModel
-from .compute import GgmlModel
+from .loader import GgufFile
+from .compute import GgmlCompute
+from .model import GgmlModel
 from .embed import LlamaModel
 
 __version__ = "0.1"

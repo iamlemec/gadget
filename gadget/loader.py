@@ -105,13 +105,13 @@ class MmapWriter:
         string = data.encode('utf-8')
         self.write_string(string)
 
-class GgufModel:
+class GgufFile:
     def __init__(self):
         self.fields  = {}
         self.tensors = {}
 
     @classmethod
-    def load(cls, fname, **kwargs):
+    def from_file(cls, fname, **kwargs):
         self = cls(**kwargs)
     
         # load model from file
@@ -391,12 +391,12 @@ class GgufModel:
     def read_unicode(self):
         return self.read_string().decode('utf-8')
 
-def test_model():
+def test_loader():
     # make data
     data = np.arange(12).reshape((3, 4))
 
     # create model
-    gf = GgufModel()
+    gf = GgufFile()
     gf.set_field('name', 'test')
     gf.set_field('value', np.uint32(42))
     gf.set_tensor('data', data)

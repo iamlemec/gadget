@@ -5,13 +5,26 @@ import numpy as np
 
 from .constants import GGMLQuantizationType
 from .ggml import (
-    ggml_type_size, ggml_tensor_overhead, ggml_graph_overhead,
-    ggml_init_params, ggml_init, ggml_new_tensor_2d, ggml_mul_mat,
-    ggml_new_graph, ggml_build_forward_expand, ggml_graph_compute_with_ctx,
-    ggml_backend_cpu_init, ggml_backend_free, ggml_backend_alloc_ctx_tensors, ggml_free,
-    ggml_backend_get_default_buffer_type, ggml_gallocr_new, ggml_gallocr_reserve,
-    ggml_gallocr_get_buffer_size, ggml_gallocr_alloc_graph, ggml_backend_cpu_set_n_threads,
-    ggml_backend_graph_compute, GGML_DEFAULT_GRAPH_SIZE
+    ggml_tensor_overhead,
+    ggml_graph_overhead,
+    ggml_init_params,
+    ggml_init,
+    ggml_new_tensor_1d,
+    ggml_new_tensor_2d,
+    ggml_mul_mat,
+    ggml_new_graph,
+    ggml_build_forward_expand,
+    ggml_backend_cpu_init,
+    ggml_backend_free,
+    ggml_backend_alloc_ctx_tensors,
+    ggml_free,
+    ggml_backend_get_default_buffer_type,
+    ggml_gallocr_new,
+    ggml_gallocr_reserve,
+    ggml_gallocr_alloc_graph,
+    ggml_backend_cpu_set_n_threads,
+    ggml_backend_graph_compute,
+    GGML_DEFAULT_GRAPH_SIZE,
 )
 
 gtype_to_ctype = {
@@ -63,7 +76,7 @@ def create_tensor(ctx, typ, shp):
     else:
         raise ValueError(f'unsupported shape: {shp}')
 
-class GgmlModel:
+class GgmlCompute:
     def __init__(self, specs, model, backend=None):
         # zero out model elements
         self.backend = None
@@ -175,7 +188,7 @@ def test_compute():
     }
 
     # create model and compute
-    model = GgmlModel(spec, test_model)
+    model = GgmlCompute(spec, test_model)
     c_np = model.compute(data)
 
     # get input tensors
