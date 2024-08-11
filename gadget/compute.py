@@ -117,6 +117,7 @@ class GgmlCompute:
 
     def create_backend(self, name):
         if name is None or name == 'cpu':
+            self.backend_name = 'cpu'
             self.backend = ggml_backend_cpu_init()
         elif name == 'cuda':
             raise ValueError('cuda support not implemented yet')
@@ -169,13 +170,22 @@ class GgmlCompute:
 
     def print_inputs(self):
         for name, tensor in self.inputs.items():
-            print(get_tensor_info(tensor))
+            get_tensor_info(tensor)
 
     def print_graph(self):
         n_nodes = self.graph.contents.n_nodes
         for i in range(n_nodes):
             tensor = self.graph.contents.nodes[i]
             print(get_tensor_info(tensor))
+
+    def __repr__(self):
+        graph = self.graph.contents
+        lines = (
+            [f'GgmlCompute(backend={self.backend_name})'] + ['', 'INPUTS'] +
+            [get_tensor_info(tensor) for tensor in self.inputs.values()] + ['', 'GRAPH'] +
+            [get_tensor_info(graph.nodes[i]) for i in range(graph.n_nodes)]
+        )
+        return '\n'.join(lines)
 
     def compute(self, **values):
         # set input values

@@ -52,14 +52,14 @@ def test_model():
     # model gguf
     gguf = GgufFile()
     gguf.set_field('name', b'test')
-    gguf.set_field('input_dim', np.uint64(input_dim))
-    gguf.set_field('output_dim', np.uint64(output_dim))
+    gguf.set_field('input_dim', input_dim, dtype=np.uint64)
+    gguf.set_field('output_dim', output_dim, dtype=np.uint64)
     gguf.set_tensor('weight', weight)
     gguf.set_tensor('bias', bias)
 
     # model inputs
     inputs = dict(
-        x = (GGMLQuantizationType.F32, (batch_size, input_dim))
+        x = (GGMLQuantizationType.F32, (batch_size, input_dim)),
     )
 
     # model function (comments are ggml shapes)
@@ -84,8 +84,7 @@ def test_model():
 
     # load model (this sets params)
     model = GgmlModel.from_gguf(gguf, inputs, forward)
-    model.print_inputs()
-    model.print_graph()
+    print(model)
 
     # compute on input data
     x = np.ones((batch_size, input_dim), dtype=np.float32)
