@@ -16,12 +16,14 @@ You can pass arguments to `cmake` using the `CMAKE_ARGS` environment varibles. F
 CMAKE_ARGS="-DGGML_CUDA=ON"
 ```
 
-# Usage
+# Conventions
 
-*Note on GGML shape convention*: for `ggml_mul_mat` and others, the shape of inputs `x` and `y` and output `z` should be
+*Matrix shape and order*: For contiguous tensors, the stride of the first dimension is one?
+
+*Note on GGML shape convention*: for `ggml_mul_mat` and others, the shape of inputs `a` and `b` and output `c` should be
 ```
-x ~ (n, k, a, b)
-y ~ (m, k, a, b)
-z ~ (m, n, a, b)
+a ~ (k, n, i, j)
+b ~ (k, m, i, j)
+c ~ (n, m, i, j)
 ```
-In other words, the matmul is performed over the first two dimensions according to `z.T = x @ y.T` and is batched over the remaining dimensions.
+In other words, the matmul is performed over the first two dimensions according to `c.T = b.T @ a` (or `c = a.T @ b`) and is batched over the remaining dimensions.

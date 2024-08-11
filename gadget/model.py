@@ -5,7 +5,7 @@ import numpy as np
 from .constants import GGMLQuantizationType
 from .ggml import ggml_mul_mat, ggml_add
 from .loader import GgufFile
-from .compute import GgmlCompute
+from .compute import GgmlCompute, get_tensor_info, set_tensor_name
 
 class GgmlModel(GgmlCompute):
     def __init__(self, params, inputs, model, backend=None):
@@ -26,7 +26,8 @@ class GgmlModel(GgmlCompute):
     
         # assign tensors on backend
         for name, (ttype, tensor) in gguf.tensors.items():
-            self.set_input(name, tensor.T)
+            # ggml uses reverse shape convension from numpy
+            self.set_input(name, tensor)
 
         # return model
         return self
@@ -45,8 +46,8 @@ def test_model():
     input_dim, output_dim, batch_size = 32, 16, 8
 
     # model params
-    weight = np.ones((input_dim, output_dim), dtype=np.float32)
-    bias = np.ones((output_dim, 1), dtype=np.float32)
+    weight = np.ones((output_dim, input_dim), dtype=np.float32)
+    bias = np.ones((output_dim,), dtype=np.float32)
 
     # model gguf
     gguf = GgufFile()
@@ -57,32 +58,39 @@ def test_model():
     gguf.set_tensor('bias', bias)
 
     # model inputs
-    inputs = {
-        'x': (GGMLQuantizationType.F32, (input_dim, batch_size))
-    }
+    inputs = dict(
+        x = (GGMLQuantizationType.F32, (batch_size, input_dim))
+    )
 
-    # model function
+    # model function (comments are ggml shapes)
     def forward(ctx, inputs):
+        # load params
         weight = inputs['weight'] # [input_dim, output_dim]
-        bias = inputs['bias'] # [output_dim, 1]
+        bias = inputs['bias'] # [output_dim]
+
+        # load inputs
         x = inputs['x'] # [input_dim, batch_size]
-        a = ggml_mul_mat(ctx, weight, x) # [batch_size, output_dim]
-        b = ggml_add(ctx, a, bias) # [batch_size, output_dim]
+
+        # do computation
+        a = ggml_mul_mat(ctx, weight, x) # [output_dim, batch_size]
+        b = ggml_add(ctx, a, bias) # [output_dim, batch_size]
+
+        # set tensor names
+        set_tensor_name(a, 'a')
+        set_tensor_name(b, 'b')
+
+        # return results
         return b
 
     # load model (this sets params)
     model = GgmlModel.from_gguf(gguf, inputs, forward)
+    model.print_inputs()
+    model.print_graph()
 
-    # define input data
-    x = np.ones((input_dim, batch_size), dtype=np.float32)
-    data = {'x': x.T}
-
-    # compute
-    y = model.compute(data)
+    # compute on input data
+    x = np.ones((batch_size, input_dim), dtype=np.float32)
+    y = model.compute(x=x)
 
     # test results
-    y0 = x.T @ weight + bias.T
+    y0 = (weight @ x.T + bias[:,None]).T
     assert np.allclose(y, y0)
-
-    # return model and data
-    return weight, bias, x, y

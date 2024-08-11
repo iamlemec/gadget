@@ -160,11 +160,13 @@ class GgufFile:
             self.fields[name] = value
 
         # read tensor metadata
+        # NOTE: we reverse the shape to match numpy array convention
         metadata = {}
         for _ in range(n_tensors):
             name = self.read_unicode()
             dims = self.read_uint32()
-            shape = tuple(map(int, self.read(np.uint64, dims).tolist()))
+            gshape = self.read(np.uint64, dims).astype(np.int64)
+            shape = tuple(map(int, gshape.tolist()[::-1]))
             ttype = GGMLQuantizationType(self.read_uint32())
             offset = self.read_uint64()
             metadata[name] = shape, ttype, offset
@@ -343,7 +345,19 @@ class GgufFile:
     def get_field(self, name, default=None):
         return self.fields.get(name, default)
 
-    def set_field(self, name, value):
+    def set_field(self, name, value, dtype=None):
+        # convert to bytes if needed
+        if type(value) is str:
+            value = value.encode('utf-8')
+
+        # convenience conversion option
+        if dtype is not None:
+            if type(value) is np.ndarray:
+                value = np.asarray(value, dtype=dtype)
+            else:
+                value = dtype(value)
+
+        # check that type is valid
         vtype = type(value)
         if vtype is bytes or is_string_list(value):
             pass # string or list of strings
@@ -351,16 +365,28 @@ class GgufFile:
             pass # numpy scalar or numpy array
         else:
             raise ValueError(f'Value must be string, list of strings, numpy scalar, or numpy array')
+
+        # check that array is 0- or 1-dimensional
         if vtype is np.ndarray and value.ndim > 1:
             raise ValueError(f'Array fields must be 0- or 1-dimensional arrays')
+
+        # store field
         self.fields[name] = value
 
-    def set_tensor(self, name, value, ttype=None):
-        if ttype is None:
-            if value.dtype in dtype_to_ttype:
-                ttype = dtype_to_ttype[value.dtype]
-            else:
-                raise ValueError(f'Must specify tensor type for {value.dtype}')
+    def set_tensor(self, name, value, dtype=None):
+        # convert to numpy array if needed
+        if dtype is not None:
+            value = np.asarray(value, dtype=dtype)
+        elif type(value) is not np.ndarray:
+            raise ValueError(f'Must specify dtype for non-array tensors')
+
+        # infer tensor type from dtype
+        if value.dtype in dtype_to_ttype:
+            ttype = dtype_to_ttype[value.dtype]
+        else:
+            raise ValueError(f'Unsupported dtype: {value.dtype}')
+
+        # store tensor
         self.tensors[name] = ttype, value
 
     def get_tensor(self, name):
@@ -398,7 +424,7 @@ def test_loader():
     # create model
     gf = GgufFile()
     gf.set_field('name', 'test')
-    gf.set_field('value', np.uint32(42))
+    gf.set_field('value', 42, dtype=np.uint32)
     gf.set_tensor('data', data)
 
     return gf

@@ -30,6 +30,7 @@ from .libs._libggml import (
     ggml_new_tensor_2d,
     ggml_new_tensor_3d,
     ggml_new_tensor_4d,
+    ggml_set_name,
     # tensor ops
     ggml_dup,
     ggml_dup_inplace,

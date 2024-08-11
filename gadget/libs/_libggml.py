@@ -429,6 +429,12 @@ def ggml_new_tensor_3d(ctx, type, ne0, ne1, ne2): ...
 )
 def ggml_new_tensor_4d(ctx, type, ne0, ne1, ne2, ne3): ...
 
+@ctypes_function(_ggml,
+    [ggml_tensor_p, ctypes.c_char_p],
+    None
+)
+def ggml_set_name(tensor, name): ...
+
 ## graphs
 
 @ctypes_function(_ggml,

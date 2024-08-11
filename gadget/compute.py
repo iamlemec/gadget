@@ -11,6 +11,9 @@ from .ggml import (
     ggml_init,
     ggml_new_tensor_1d,
     ggml_new_tensor_2d,
+    ggml_new_tensor_3d,
+    ggml_new_tensor_4d,
+    ggml_set_name,
     ggml_mul_mat,
     ggml_new_graph,
     ggml_build_forward_expand,
@@ -60,21 +63,33 @@ def create_graph_context(graph_size=GGML_DEFAULT_GRAPH_SIZE):
     # return context
     return ctx_graph
 
-def create_tensor(ctx, typ, shp):
-    if len(shp) == 1:
-        ne1, = shp
-        return ggml_new_tensor_1d(ctx, typ, ne1)
-    elif len(shp) == 2:
-        ne1, ne2 = shp
-        return ggml_new_tensor_2d(ctx, typ, ne1, ne2)
-    elif len(shp) == 3:
-        ne1, ne2, ne3 = shp
-        return ggml_new_tensor_3d(ctx, typ, ne1, ne2, ne3)
-    elif len(shp) == 4:
-        ne1, ne2, ne3, ne4 = shp
-        return ggml_new_tensor_4d(ctx, typ, ne1, ne2, ne3, ne4)
-    else:
+# dispatch create functions
+create_funcs = {
+    1: ggml_new_tensor_1d,
+    2: ggml_new_tensor_2d,
+    3: ggml_new_tensor_3d,
+    4: ggml_new_tensor_4d,
+}
+
+# we reverse shape to match numpy convention
+def create_tensor(ctx, typ, shp, nam=None):
+    if (dims := len(shp)) not in create_funcs:
         raise ValueError(f'unsupported shape: {shp}')
+    tensor = create_funcs[dims](ctx, typ, *shp[::-1])
+    if nam is not None:
+        ggml_set_name(tensor, nam.encode('utf-8'))
+    return tensor
+
+def get_tensor_info(tensor):
+    value = tensor.contents
+    name = value.name.decode('utf-8')
+    ttype = GGMLQuantizationType(value.type)
+    shape = tuple(value.ne[:4])
+    stat = f'{name}: {ttype.name} × {shape}'
+    return stat
+
+def set_tensor_name(tensor, name):
+    ggml_set_name(tensor, name.encode('utf-8'))
 
 class GgmlCompute:
     def __init__(self, specs, model, backend=None):
@@ -115,7 +130,7 @@ class GgmlCompute:
 
         # create tensors
         self.inputs = {
-            nam: create_tensor(self.tensors, typ, shp)
+            nam: create_tensor(self.tensors, typ, shp, nam=nam)
             for nam, (typ, shp) in specs.items()
         }
 
@@ -152,7 +167,17 @@ class GgmlCompute:
         ggml_gallocr_reserve(allocr, self.graph)
         ggml_gallocr_alloc_graph(allocr, self.graph)
 
-    def compute(self, values):
+    def print_inputs(self):
+        for name, tensor in self.inputs.items():
+            print(get_tensor_info(tensor))
+
+    def print_graph(self):
+        n_nodes = self.graph.contents.n_nodes
+        for i in range(n_nodes):
+            tensor = self.graph.contents.nodes[i]
+            print(get_tensor_info(tensor))
+
+    def compute(self, **values):
         # set input values
         for name, value in values.items():
             self.set_input(name, value)
@@ -169,34 +194,28 @@ class GgmlCompute:
         return out_np
 
 def test_compute():
-    # simple multiply model
+    # define inputs: name -> (type, shape)
+    spec = {
+        'a': (GGMLQuantizationType.F32, (4, 2)),
+        'b': (GGMLQuantizationType.F32, (3, 2)),
+    }
+
+    # define model function
     def test_model(ctx, inputs):
         a, b = inputs['a'], inputs['b']
         c = ggml_mul_mat(ctx, a, b)
         return c
 
-    # define inputs: type, shape (col, row)
-    spec = {
-        'a': (GGMLQuantizationType.F32, (2, 4)),
-        'b': (GGMLQuantizationType.F32, (2, 3)),
-    }
-
-    # define input data
-    data = {
-        'a': [[2 , 8], [5, 1], [4, 2], [8, 6]],
-        'b': [[10, 5], [9, 9], [5, 4]]
-    }
-
-    # create model and compute
+    # create model graph
     model = GgmlCompute(spec, test_model)
-    c_np = model.compute(data)
 
-    # get input tensors
-    a_np = model.get_input('a')
-    b_np = model.get_input('b')
+    # compute on input data
+    a = [[2 , 8], [5, 1], [4, 2], [8, 6]]
+    b = [[10, 5], [9, 9], [5, 4]]
+    c_np = model.compute(a=a, b=b)
 
     # test results
-    assert np.allclose(c_np, (a_np @ b_np.T).T)
-
-    # return arrays
-    return a_np, b_np, c_np
+    a_np = np.array(a, dtype=np.float32)
+    b_np = np.array(b, dtype=np.float32)
+    c0_np = (a_np @ b_np.T).T
+    assert np.allclose(c_np, c0_np)
