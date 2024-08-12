@@ -3,6 +3,8 @@
 import os
 import ctypes
 
+from .constants import GGMLQuantizationType
+
 ##
 ## library
 ##
@@ -34,6 +36,74 @@ def ctypes_function(library, argtypes=None, restype=None):
         func.restype = restype
         return func
     return decorator
+
+def named_output(func):
+    def wrapper(*args, name=None):
+        c = func(*args)
+        if name is not None:
+            ggml_set_name(c, name.encode('utf-8'))
+        return c
+    return wrapper
+
+def get_tensor_nelem(tensor):
+    value = tensor.contents
+    return tuple(value.ne[:4])
+
+def get_input_info(*args):
+    return ' '.join([str(get_tensor_nelem(tensor)) for tensor in args])
+
+def check_inputs(check):
+    def outer(func):
+        def inner(ctx, *args):
+            if not check(*args):
+                raise ValueError(
+                    f'{func.__name__}: bad tensor sizes {get_input_info(*args)}'
+                )
+            return func(ctx, *args)
+        return inner
+    return outer
+
+##
+## pre-emptive type checking and naming
+## some of these are copies of inlined functions
+##
+
+def get_tensor_nelem(tensor, raw=False):
+    value = tensor.contents
+    return tuple(value.ne[:4])
+
+def get_tensor_type(tensor):
+    value = tensor.contents
+    return GGMLQuantizationType(value.type)
+
+def ggml_can_mul_mat(t0, t1):
+    ne0 = get_tensor_nelem(t0, raw=True)
+    ne1 = get_tensor_nelem(t1, raw=True)
+    return (
+        (ne0[0] == ne1[0]     ) and
+        (ne0[2]  % ne1[2] == 0) and
+        (ne0[3]  % ne1[3] == 0)
+    )
+
+def ggml_can_add(t0, t1):
+    ne0 = get_tensor_nelem(t0)
+    ne1 = get_tensor_nelem(t1)
+    return (
+        (ne0[0] % ne1[0] == 0) and
+        (ne0[1] % ne1[1] == 0) and
+        (ne0[2] % ne1[2] == 0) and
+        (ne0[3] % ne1[3] == 0)
+    )
+
+def ggml_can_get_rows(t0, t1):
+    ne0 = get_tensor_nelem(t0)
+    ne1 = get_tensor_nelem(t1)
+    ttype1 = get_tensor_type(t1)
+    return (
+        (ne0[2] == ne1[1]) and
+        (ne1[3] == 1     ) and
+        (ttype1 == GGMLQuantizationType.I32)
+    )
 
 ##
 ## constants
@@ -468,6 +538,8 @@ def ggml_dup(ctx, a): ...
 )
 def ggml_dup_inplace(ctx, a): ...
 
+@named_output
+@check_inputs(ggml_can_add)
 @ctypes_function(_ggml,
     [ggml_context_p, ggml_tensor_p, ggml_tensor_p],
     ggml_tensor_p
@@ -822,6 +894,8 @@ def ggml_group_norm_inplace(ctx, a, n_groups): ...
 )
 def ggml_rms_norm_back(ctx, a, b, eps): ...
 
+@named_output
+@check_inputs(ggml_can_mul_mat)
 @ctypes_function(_ggml,
     [ggml_context_p, ggml_tensor_p, ggml_tensor_p],
     ggml_tensor_p
@@ -966,6 +1040,7 @@ def ggml_reshape_3d(ctx, a, ne0, ne1, ne2): ...
 )
 def ggml_reshape_4d(ctx, a, ne0, ne1, ne2, ne3): ...
 
+@named_output
 @ctypes_function(_ggml,
     [ggml_context_p, ggml_tensor_p, ctypes.c_int64, ctypes.c_size_t],
     ggml_tensor_p
@@ -1002,6 +1077,8 @@ def ggml_permute(ctx, a, axis0, axis1, axis2, axis3): ...
 )
 def ggml_transpose(ctx, a): ...
 
+@named_output
+@check_inputs(ggml_can_get_rows)
 @ctypes_function(_ggml,
     [ggml_context_p, ggml_tensor_p, ggml_tensor_p],
     ggml_tensor_p

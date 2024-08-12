@@ -4,9 +4,8 @@ import ctypes
 import numpy as np
 
 from .utils import AttrDict
-from .constants import GGMLQuantizationType
 from .ggml import (
-    get_tensor_shape,
+    GGMLQuantizationType,
     ggml_tensor_overhead,
     ggml_graph_overhead,
     ggml_init_params,
@@ -40,6 +39,17 @@ gtype_to_ctype = {
     GGMLQuantizationType.I32: ctypes.c_int32,
     GGMLQuantizationType.I64: ctypes.c_int64,
 }
+
+def trim_nelem(shape):
+    dims = 1 + max([
+        i for i, d in enumerate(shape) if d > 1
+    ], default=0)
+    return shape[:dims]
+
+def get_tensor_shape(tensor, raw=False):
+    value = tensor.contents
+    nelem = tuple(value.ne[:4])
+    return trim_nelem(nelem)[::-1]
 
 def get_tensor_info(tensor):
     value = tensor.contents

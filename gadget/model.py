@@ -3,14 +3,15 @@
 import numpy as np
 from typing import get_type_hints
 
-from .constants import GGMLQuantizationType
-from .ggml import ggml_mul_mat, ggml_add
+from .ggml import GGMLQuantizationType, ggml_mul_mat, ggml_add
 from .loader import GgufFile
 from .compute import GgmlCompute, set_tensor_name
 
 class GgmlModel(GgmlCompute):
-    def __init__(self, params, inputs, **kwargs):
-        super().__init__(params | inputs, self.forward, **kwargs)
+    def __init__(self, params, inputs, backend=None, **kwargs):
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+        super().__init__(params | inputs, self.forward, backend=backend)
 
     @classmethod
     def from_gguf(cls, gguf, inputs, **kwargs):

@@ -3,7 +3,7 @@
 import numpy as np
 from operator import itemgetter
 
-from .constants import (
+from .libs.constants import (
     GGUF_MAGIC, GGUF_VERSION, GGUF_DEFAULT_ALIGNMENT,
     GGUFValueType, GGMLQuantizationType
 )

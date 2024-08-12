@@ -16,6 +16,12 @@ You can pass arguments to `cmake` using the `CMAKE_ARGS` environment varibles. F
 CMAKE_ARGS="-DGGML_CUDA=ON"
 ```
 
+To build the shared libraries for local testing, you can use `cmake` directly
+```bash
+cmake -DCMAKE_BUILD_TYPE=Debug -B build .
+cmake --build build -j
+```
+
 # Conventions
 
 *Matrix shape and order*: tensors are row-major, meaning elements in a row are stored in contiguous order. However, the way in which dimensions are reported is reversed from `numpy`. The first number in the shape is the number of columns, the second is the number of rows, and so on. The logic here is that the first number denotes the number of elements in a row, the second denotes the number of columns and so on.

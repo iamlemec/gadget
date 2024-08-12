@@ -1,6 +1,6 @@
 from .libs import _libggml
 
-from .constants import(
+from .libs.constants import(
     GGMLQuantizationType
 )
 
@@ -38,7 +38,7 @@ from .libs._libggml import (
     # tensor ops
     ggml_dup,
     ggml_dup_inplace,
-    ggml_add as _ggml_add,
+    ggml_add,
     ggml_add_inplace,
     ggml_add_cast,
     ggml_add1,
@@ -97,7 +97,7 @@ from .libs._libggml import (
     ggml_group_norm,
     ggml_group_norm_inplace,
     ggml_rms_norm_back,
-    ggml_mul_mat as _ggml_mul_mat,
+    ggml_mul_mat,
     ggml_mul_mat_set_prec,
     ggml_mul_mat_id,
     ggml_out_prod,
@@ -127,7 +127,7 @@ from .libs._libggml import (
     ggml_view_4d,
     ggml_permute,
     ggml_transpose,
-    ggml_get_rows as _ggml_get_rows,
+    ggml_get_rows,
     ggml_get_rows_back,
     ggml_diag,
     ggml_diag_mask_inf,
@@ -177,81 +177,3 @@ from .libs._libggml import (
     ggml_add_rel_pos,
     ggml_add_rel_pos_inplace,
 )
-
-# pre-emptive type checking and naming
-
-def trim_shape(shape):
-    dims = 1 + max([
-        i for i, d in enumerate(shape) if d > 1
-    ], default=0)
-    return shape[:dims]
-
-def get_tensor_shape(tensor, raw=False):
-    value = tensor.contents
-    shape = tuple(value.ne[:4])
-    if not raw:
-        shape = trim_shape(shape)[::-1]
-    return shape
-
-def get_tensor_type(tensor):
-    value = tensor.contents
-    return value.type
-
-# this is inlined
-def ggml_can_mul_mat(t0, t1):
-    shape0 = get_tensor_shape(t0, raw=True)
-    shape1 = get_tensor_shape(t1, raw=True)
-    return (
-        (shape0[0] == shape1[0]     ) and
-        (shape0[2]  % shape1[2] == 0) and
-        (shape0[3]  % shape1[3] == 0)
-    )
-
-# this is inlined
-def ggml_can_repeat(t0, t1):
-    shape0 = get_tensor_shape(t0, raw=True)
-    shape1 = get_tensor_shape(t1, raw=True)
-    return (
-        (shape1[0] % shape0[0] == 0) and
-        (shape1[1] % shape0[1] == 0) and
-        (shape1[2] % shape0[2] == 0) and
-        (shape1[3] % shape0[3] == 0)
-    )
-
-def ggml_can_get_rows(t0, t1):
-    shape0 = get_tensor_shape(t0, raw=True)
-    shape1 = get_tensor_shape(t1, raw=True)
-    ttype1 = get_tensor_type(t1)
-    ttype_i32 = GGMLQuantizationType.I32.value
-    return (
-        (shape0[2] == shape1[1]) and
-        (shape1[3] == 1        ) and
-        (ttype1    == ttype_i32)
-    )
-
-def ggml_mul_mat(ctx, a, b, name=None):
-    if not ggml_can_mul_mat(a, b):
-        shape_a, shape_b = get_tensor_shape(a), get_tensor_shape(b)
-        raise ValueError(f'ggml_mul_mat: bad tensor dimensions {shape_a} and {shape_b}')
-    c = _ggml_mul_mat(ctx, a, b)
-    if name is not None:
-        ggml_set_name(c, name.encode('utf-8'))
-    return c
-
-def ggml_add(ctx, a, b, name=None):
-    if not ggml_can_repeat(b, a):
-        shape_a, shape_b = get_tensor_shape(a), get_tensor_shape(b)
-        raise ValueError(f'ggml_add: bad tensor dimensions {shape_a} and {shape_b}')
-    c = _ggml_add(ctx, a, b)
-    if name is not None:
-        ggml_set_name(c, name.encode('utf-8'))
-    return c
-
-def ggml_get_rows(ctx, a, b, name=None):
-    if not ggml_can_get_rows(a, b):
-        shape_a, shape_b = get_tensor_shape(a), get_tensor_shape(b)
-        raise ValueError(f'ggml_get_rows: bad tensor dimensions {shape_a} and {shape_b}')
-    c = _ggml_get_rows(ctx, a, b)
-    if name is not None:
-        ggml_set_name(c, name.encode('utf-8'))
-    return c
