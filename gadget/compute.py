@@ -3,8 +3,10 @@
 import ctypes
 import numpy as np
 
+from .utils import AttrDict
 from .constants import GGMLQuantizationType
 from .ggml import (
+    get_tensor_shape,
     ggml_tensor_overhead,
     ggml_graph_overhead,
     ggml_init_params,
@@ -38,17 +40,6 @@ gtype_to_ctype = {
     GGMLQuantizationType.I32: ctypes.c_int32,
     GGMLQuantizationType.I64: ctypes.c_int64,
 }
-
-def trim_shape(shape):
-    dims = 1 + max([
-        i for i, d in enumerate(shape) if d > 1
-    ], default=0)
-    return shape[:dims]
-
-def get_tensor_shape(tensor):
-    value = tensor.contents
-    shape = tuple(value.ne[:4])
-    return trim_shape(shape)[::-1]
 
 def get_tensor_info(tensor):
     value = tensor.contents
@@ -149,10 +140,10 @@ class GgmlCompute:
         self.tensors = create_tensor_context(len(specs))
 
         # create tensors
-        self.inputs = {
+        self.inputs = AttrDict({
             nam: create_tensor(self.tensors, typ, shp, nam=nam)
             for nam, (typ, shp) in specs.items()
-        }
+        })
 
         # assign tensors on backend
         ggml_backend_alloc_ctx_tensors(self.tensors, self.backend)
@@ -218,16 +209,14 @@ class GgmlCompute:
 
 def test_compute():
     # define inputs: name -> (type, shape)
-    spec = {
-        'a': (GGMLQuantizationType.F32, (4, 2)),
-        'b': (GGMLQuantizationType.F32, (3, 2)),
-    }
+    spec = dict(
+        a = (GGMLQuantizationType.F32, (4, 2)),
+        b = (GGMLQuantizationType.F32, (3, 2)),
+    )
 
     # define model function
-    def test_model(ctx, inputs):
-        a, b = inputs['a'], inputs['b']
-        c = ggml_mul_mat(ctx, a, b)
-        return c
+    def test_model(ctx, inp):
+        return ggml_mul_mat(ctx, inp.a, inp.b, name='c')
 
     # create model graph
     model = GgmlCompute(spec, test_model)
@@ -242,3 +231,6 @@ def test_compute():
     b_np = np.array(b, dtype=np.float32)
     c0_np = (a_np @ b_np.T).T
     assert np.allclose(c_np, c0_np)
+
+    # return model
+    return model

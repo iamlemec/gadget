@@ -63,23 +63,9 @@ def test_model():
             # return model
             return self
 
-        def forward(self, ctx, inputs):
-            # load params
-            weight = inputs['weight'] # [output_dim, input_dim]
-            bias = inputs['bias'] # [output_dim]
-
-            # load inputs
-            x = inputs['x'] # [batch_size, input_dim]
-
-            # do computation
-            a = ggml_mul_mat(ctx, weight, x) # [batch_size, output_dim]
-            b = ggml_add(ctx, a, bias) # [batch_size, output_dim]
-
-            # set tensor names
-            set_tensor_name(a, 'a')
-            set_tensor_name(b, 'b')
-
-            # return results
+        def forward(self, ctx, inp):
+            a = ggml_mul_mat(ctx, inp.weight, inp.x, name='a') # [batch_size, output_dim]
+            b = ggml_add(ctx, a, inp.bias, name='b') # [batch_size, output_dim]
             return b
 
     # define true model parameters

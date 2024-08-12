@@ -11,6 +11,16 @@ def list_splitter(text, maxlen):
     for i, j in batch_indices(len(text), maxlen):
         yield text[i:j]
 
+# dictionary that allows getattr access
+class AttrDict(dict):
+    def __getattr__(self, key):
+        if type(key) is list:
+            return [self[k] for k in key]
+        return self[key]
+
+    def __setattr__(self, key, value):
+        self[key] = value
+
 # = defaultdict(list)
 # + handles popping off maximal list
 # + handles deletion on empty list
