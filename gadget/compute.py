@@ -32,14 +32,41 @@ from .ggml import (
 
 gtype_to_ctype = {
     GGMLQuantizationType.F32: ctypes.c_float,
+    # GGMLQuantizationType.F16: ctypes.c_half, # not supported by ctypes
+    GGMLQuantizationType.I8: ctypes.c_int8,
+    GGMLQuantizationType.I16: ctypes.c_int16,
+    GGMLQuantizationType.I32: ctypes.c_int32,
+    GGMLQuantizationType.I64: ctypes.c_int64,
 }
 
-def tensor_to_numpy(tensor, dims=2):
-    assert dims <= 4
-    assert tensor.contents.type in gtype_to_ctype
-    ctype = gtype_to_ctype[tensor.contents.type]
-    shape = tuple(tensor.contents.ne[:dims])[::-1]
-    p = ctypes.cast(tensor.contents.data, ctypes.POINTER(ctype))
+def trim_shape(shape):
+    dims = 1 + max([
+        i for i, d in enumerate(shape) if d > 1
+    ], default=0)
+    return shape[:dims]
+
+def get_tensor_shape(tensor):
+    value = tensor.contents
+    shape = tuple(value.ne[:4])
+    return trim_shape(shape)[::-1]
+
+def get_tensor_info(tensor):
+    value = tensor.contents
+    name = value.name.decode('utf-8')
+    ttype = GGMLQuantizationType(value.type)
+    shape = get_tensor_shape(tensor)
+    stat = f'{name}: {ttype.name} × {shape}'
+    return stat
+
+# this assumes the data is contiguous
+# will implicity squeeze unit dimensions
+def tensor_to_numpy(tensor):
+    value = tensor.contents
+    if value.type not in gtype_to_ctype:
+        raise ValueError(f'unsupported type: {value.type}')
+    ctype = gtype_to_ctype[value.type]
+    shape = get_tensor_shape(tensor)
+    p = ctypes.cast(value.data, ctypes.POINTER(ctype))
     return np.ctypeslib.as_array(p, shape=shape)
 
 def create_tensor_context(num_tensors):
@@ -79,25 +106,6 @@ def create_tensor(ctx, typ, shp, nam=None):
     if nam is not None:
         ggml_set_name(tensor, nam.encode('utf-8'))
     return tensor
-
-def trim_shape(shape):
-    dims = 1 + max([
-        i for i, d in enumerate(shape) if d > 1
-    ], default=0)
-    return shape[:dims]
-
-def get_tensor_shape(tensor):
-    value = tensor.contents
-    shape = tuple(value.ne[:4])
-    return trim_shape(shape)
-
-def get_tensor_info(tensor):
-    value = tensor.contents
-    name = value.name.decode('utf-8')
-    ttype = GGMLQuantizationType(value.type)
-    shape = trim_shape(tuple(value.ne[:4]))
-    stat = f'{name}: {ttype.name} × {shape[::-1]}'
-    return stat
 
 def set_tensor_name(tensor, name):
     ggml_set_name(tensor, name.encode('utf-8'))
