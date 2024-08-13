@@ -171,8 +171,9 @@ def set_tensor_name(tensor, name):
 ##
 
 class GgmlCompute:
-    def __init__(self, specs, model, backend=None):
+    def __init__(self, hparams, specs, model, backend=None):
         # construct model elements
+        self.create_hparams(hparams)
         self.create_backend(backend)
         self.create_tensors(specs)
         self.create_graph(model)
@@ -187,6 +188,9 @@ class GgmlCompute:
             ggml_free(self.ctx_tensors)
         if self.backend is not None:
             ggml_backend_free(self.backend)
+
+    def create_hparams(self, hparams):
+        self.hparams = hparams
 
     def create_backend(self, name):
         if name is None or name == 'cpu':
@@ -240,7 +244,7 @@ class GgmlCompute:
 
         # create graph and expand
         self.graph = ggml_new_graph(self.ctx_graph)
-        self.output = model(self.ctx_graph, self.inputs)
+        self.output = model(self.ctx_graph, self.hparams, self.inputs)
         ggml_build_forward_expand(self.graph, self.output)
 
         # allocate buffers for graph (worst case scenario)
@@ -286,6 +290,11 @@ class GgmlCompute:
 ##
 
 def test_compute(n_layers=60, embed_dim=32, batch_size=16):
+    # model parameters
+    hparams = dict(
+        n_layers=n_layers, embed_dim=embed_dim, batch_size=batch_size
+    )
+
     # tensor specifications
     spec_weight = {
         f'weight{i}': (GGMLQuantizationType.F32, (embed_dim, embed_dim))
@@ -301,15 +310,16 @@ def test_compute(n_layers=60, embed_dim=32, batch_size=16):
     spec = spec_weight | spec_bias | spec_input
 
     # define model function
-    def test_model(ctx, inp):
-        x = inp.x
+    def test_model(ctx, par, inp):
+        n = par['n_layers']
+        x = inp['x']
         for i in range(n_layers):
             x = ggml_mul_mat(ctx, inp[f'weight{i}'], x, name=f'a{i}')
             x = ggml_add(ctx, x, inp[f'bias{i}'], name=f'b{i}')
         return x
 
     # create model graph
-    model = GgmlCompute(spec, test_model)
+    model = GgmlCompute(hparams, spec, test_model)
 
     # set weights and biases
     for i in range(n_layers):

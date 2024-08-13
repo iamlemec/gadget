@@ -8,25 +8,62 @@ from .loader import GgufFile
 from .compute import GgmlCompute, set_tensor_name
 
 ##
+## type decorators
+##
+
+class Tensor:
+    def __init__(self, ttype, shape):
+        if type(ttype) is str:
+            ttype = GGMLQuantizationType[ttype]
+        self.ttype = ttype
+        self.shape = shape
+
+    def to_tuple(self):
+        return self.ttype, self.shape
+
+def resolve_field(key, *dicts):
+    if type(key) is str:
+        for d in dicts:
+            if key in d:
+                return d[key]
+        raise KeyError(f'key {key} not found')
+    else:
+        return key
+
+##
 ## model interface
 ##
 
 class GgmlModel(GgmlCompute):
-    def __init__(self, params, inputs, backend=None, **kwargs):
-        for k, v in kwargs.items():
-            setattr(self, k, v)
-        super().__init__(params | inputs, self.forward, backend=backend)
+    def __init__(self, hparams, weights, inputs, backend=None):
+        def forward(*args):
+            return self.forward()
+        super().__init__(hparams, weights | inputs, forward, backend=backend)
 
     @classmethod
-    def from_gguf(cls, gguf, inputs, **kwargs):
-        # extract params metadata from gguf
-        params = {
+    def from_gguf(cls, gguf, backend=None, **kwargs):
+        # get hparams (shallow copy)
+        hparams = gguf.fields | kwargs
+
+        # get metadata from gguf
+        weights = {
             key: (ttype, tensor.shape)
             for key, (ttype, tensor) in gguf.tensors.items()
         }
 
+        # get type hints for model
+        hints = {
+            k: v.to_tuple() for k, v in get_type_hints(cls).items()
+        }
+
+        # resolve string fields
+        inputs = {
+            k: (t, [resolve_field(x, hparams) for x in s])
+            for k, (t, s) in hints.items()
+        }
+
         # create model and graph
-        self = cls(params, inputs, **kwargs)
+        self = cls(hparams, weights, inputs, backend=backend)
 
         # assign tensors on backend
         for name, (ttype, tensor) in gguf.tensors.items():
@@ -40,7 +77,7 @@ class GgmlModel(GgmlCompute):
         gguf = GgufFile.from_path(path)
         return cls.from_gguf(gguf, *args, **kwargs)
 
-    def forward(self, ctx, inputs):
+    def forward(self):
         raise NotImplementedError('forward method must be implemented')
 
 ##
@@ -49,27 +86,14 @@ class GgmlModel(GgmlCompute):
 
 def test_model():
     class TestModel(GgmlModel):
-        @classmethod
-        def from_gguf(cls, gguf, batch_size):
-            # get hparams
-            n_layers = gguf.get_field('n_layers')
-            input_dim = gguf.get_field('embed_dim')
+        x: Tensor('F32', ('batch_size', 'embed_dim'))
 
-            # model inputs
-            inputs = dict(
-                x = (GGMLQuantizationType.F32, (batch_size, embed_dim)),
-            )
-
-            # load model (this sets params)
-            return super().from_gguf(
-                gguf, inputs, n_layers=n_layers, embed_dim=embed_dim
-            )
-
-        def forward(self, ctx, inp):
-            x = inp.x
-            for i in range(self.n_layers):
-                x = ggml_mul_mat(ctx, inp[f'weight{i}'], x, name=f'a{i}')
-                x = ggml_add(ctx, x, inp[f'bias{i}'], name=f'b{i}')
+        def forward(self):
+            x = self.inputs.x
+            for i in range(self.hparams['n_layers']):
+                weight, bias = self.inputs[f'weight{i}'], self.inputs[f'bias{i}']
+                x = ggml_mul_mat(self.ctx_graph, weight, x, name=f'a{i}')
+                x = ggml_add(self.ctx_graph, x, bias, name=f'b{i}')
             return x
 
     # define model hparams
@@ -84,13 +108,12 @@ def test_model():
     # add layers
     for i in range(n_layers):
         weight = np.random.randn(embed_dim, embed_dim).astype(np.float32)
-        gguf.set_tensor(f'weight{i}', weight)
-    for i in range(n_layers):
         bias = np.random.randn(embed_dim).astype(np.float32)
+        gguf.set_tensor(f'weight{i}', weight)
         gguf.set_tensor(f'bias{i}', bias)
 
     # load gguf as model
-    model = TestModel.from_gguf(gguf, batch_size)
+    model = TestModel.from_gguf(gguf, batch_size=batch_size)
 
     # compute on input data
     x = np.random.randn(batch_size, embed_dim).astype(np.float32)
