@@ -1,5 +1,6 @@
 # higher level ggml interface
 
+import math
 import ctypes
 import numpy as np
 
@@ -16,6 +17,7 @@ from .ggml import (
     ggml_new_tensor_4d,
     ggml_set_name,
     ggml_mul_mat,
+    ggml_add,
     ggml_new_graph,
     ggml_build_forward_expand,
     ggml_backend_cpu_init,
@@ -26,6 +28,7 @@ from .ggml import (
     ggml_gallocr_new,
     ggml_gallocr_reserve,
     ggml_gallocr_alloc_graph,
+    ggml_gallocr_get_buffer_size,
     ggml_backend_cpu_set_n_threads,
     ggml_backend_graph_compute,
     GGML_DEFAULT_GRAPH_SIZE,
@@ -158,16 +161,20 @@ class GgmlCompute:
         # assign tensors on backend
         ggml_backend_alloc_ctx_tensors(self.tensors, self.backend)
 
+        # create numpy accessors
+        self.inputs_np = AttrDict({
+            nam: tensor_to_numpy(ten)
+            for nam, ten in self.inputs.items()
+        })
+
     # return tensor numpy view
     def get_input(self, name):
-        ten = self.inputs[name]
-        return tensor_to_numpy(ten)
+        return self.inputs_np[name]
 
     # set tensor values using numpy
     def set_input(self, name, value):
-        ten = self.inputs[name]
-        ten_np = tensor_to_numpy(ten)
-        ten_np[:] = value
+        ten_np = self.inputs_np[name]
+        ten_np[...] = value
 
     # create computational graph
     def create_graph(self, model):
@@ -176,17 +183,23 @@ class GgmlCompute:
 
         # create graph and expand
         self.graph = ggml_new_graph(ctx_graph)
-        output = model(ctx_graph, self.inputs)
-        ggml_build_forward_expand(self.graph, output)
+        self.output = model(ctx_graph, self.inputs)
+        ggml_build_forward_expand(self.graph, self.output)
 
         # free graph context
         ggml_free(ctx_graph)
 
         # allocate buffers for graph (worst case scenario)
         buf_type = ggml_backend_get_default_buffer_type(self.backend)
-        allocr = ggml_gallocr_new(buf_type)
-        ggml_gallocr_reserve(allocr, self.graph)
-        ggml_gallocr_alloc_graph(allocr, self.graph)
+        self.alloc = ggml_gallocr_new(buf_type)
+
+        # allocate tensors to buffers for graph
+        ggml_gallocr_reserve(self.alloc, self.graph)
+        ggml_gallocr_alloc_graph(self.alloc, self.graph)
+
+        # print memory summary
+        n_buffers = self.alloc.contents.n_buffers
+        mem_usage = ggml_gallocr_get_buffer_size(self.alloc, 0)
 
     def compute(self, **values):
         # set input values
@@ -197,12 +210,10 @@ class GgmlCompute:
         ggml_backend_graph_compute(self.backend, self.graph)
 
         # get results
-        n_nodes = self.graph.contents.n_nodes
-        out_tensor = self.graph.contents.nodes[n_nodes-1]
-        out_np = tensor_to_numpy(out_tensor)
+        output_np = tensor_to_numpy(self.output)
 
         # return results
-        return out_np
+        return output_np
 
     def __repr__(self):
         name = self.__class__.__name__
@@ -218,29 +229,44 @@ class GgmlCompute:
         return self.compute(**values)
 
 def test_compute():
-    # define inputs: name -> (type, shape)
-    spec = dict(
-        a = (GGMLQuantizationType.F32, (4, 2)),
-        b = (GGMLQuantizationType.F32, (3, 2)),
-    )
+    # tensor shapes
+    n_layers, embed_dim, batch_size = 50, 32, 16
+
+    # tensor specifications
+    spec_weight = {
+        f'weight{i}': (GGMLQuantizationType.F32, (embed_dim, embed_dim))
+        for i in range(n_layers)
+    }
+    spec_bias = {
+        f'bias{i}': (GGMLQuantizationType.F32, (embed_dim,))
+        for i in range(n_layers)
+    }
+    spec_input = {
+        'x': (GGMLQuantizationType.F32, (batch_size, embed_dim))
+    }
+    spec = spec_weight | spec_bias | spec_input
 
     # define model function
     def test_model(ctx, inp):
-        return ggml_mul_mat(ctx, inp.a, inp.b, name='c')
+        x = inp.x
+        for i in range(n_layers):
+            x = ggml_mul_mat(ctx, inp[f'weight{i}'], x, name=f'a{i}')
+            x = ggml_add(ctx, x, inp[f'bias{i}'], name=f'b{i}')
+        return x
 
     # create model graph
     model = GgmlCompute(spec, test_model)
 
-    # compute on input data
-    a = [[2 , 8], [5, 1], [4, 2], [8, 6]]
-    b = [[10, 5], [9, 9], [5, 4]]
-    c_np = model.compute(a=a, b=b)
+    # set weights and biases
+    for i in range(n_layers):
+        weight = np.random.randn(embed_dim, embed_dim).astype(np.float32)
+        bias = np.random.randn(embed_dim).astype(np.float32)
+        model.set_input(f'weight{i}', weight)
+        model.set_input(f'bias{i}', bias)
 
-    # test results
-    a_np = np.array(a, dtype=np.float32)
-    b_np = np.array(b, dtype=np.float32)
-    c0_np = (a_np @ b_np.T).T
-    assert np.allclose(c_np, c0_np)
+    # compute on input data
+    x = np.random.randn(batch_size, embed_dim).astype(np.float32)
+    output_np = model.compute(x=x)
 
     # return model
     return model
