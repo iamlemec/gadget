@@ -66,30 +66,37 @@ def trim_nelem(shape):
     ], default=0)
     return shape[:dims]
 
+def get_tensor_name(tensor):
+    value = tensor.contents
+    return value.name.decode('utf-8')
+
 def get_tensor_shape(tensor, raw=False):
     value = tensor.contents
     nelem = tuple(value.ne[:4])
     return trim_nelem(nelem)[::-1]
 
-def get_tensor_info(tensor):
+def get_tensor_type(tensor):
     value = tensor.contents
-    name = value.name.decode('utf-8')
-    ttype = GGMLQuantizationType(value.type)
+    return GGMLQuantizationType(value.type)
+
+def get_tensor_info(tensor):
+    name = get_tensor_name(tensor)
+    ttype = get_tensor_type(tensor)
     shape = get_tensor_shape(tensor)
     stat = f'{name}: {ttype.name} × {shape}'
     return stat
 
 # this assumes the data is contiguous
 # will implicity squeeze unit dimensions
-def array_to_tensor(array, tensor_p):
+def array_to_tensor(array, tensor):
     # check tensor type
-    tensor = tensor_p.contents
-    if tensor.type not in gtype_to_ctype:
-        raise ValueError(f'unsupported type: {value.type}')
+    ttype = get_tensor_type(tensor)
+    if ttype not in gtype_to_ctype:
+        raise ValueError(f'unsupported type: {ttype}')
 
     # get data pointers
     src = array.ctypes.data
-    dst = tensor.data
+    dst = tensor.contents.data
     size = array.nbytes
 
     # copy data
@@ -97,16 +104,16 @@ def array_to_tensor(array, tensor_p):
 
 # this makes a new array and copies
 # we want to avoid deallocating ggml buffers
-def tensor_to_array(tensor_p):
+def tensor_to_array(tensor):
     # check tensor type
-    tensor = tensor_p.contents
-    if tensor.type not in gtype_to_dtype:
-        raise ValueError(f'unsupported type: {value.type}')
+    ttype = get_tensor_type(tensor)
+    if ttype not in gtype_to_dtype:
+        raise ValueError(f'unsupported type: {ttype}')
 
     # get data pointers
-    src = tensor.data
-    shape = get_tensor_shape(tensor_p)
-    dtype = gtype_to_dtype[tensor.type]
+    src = tensor.contents.data
+    shape = get_tensor_shape(tensor)
+    dtype = gtype_to_dtype[ttype]
 
     # create numpy array
     array = np.empty(shape, dtype=dtype)
@@ -224,6 +231,10 @@ class GgmlCompute:
     # set tensor values using numpy
     def set_input(self, name, array):
         tensor = self.inputs[name]
+        if type(array) is not np.ndarray:
+            ttype = get_tensor_type(tensor)
+            dtype = gtype_to_dtype[ttype]
+            array = np.asarray(array, dtype=dtype)
         array_to_tensor(array, tensor)
 
     # create computational graph
