@@ -33,6 +33,7 @@ from .ggml import (
     ggml_backend_graph_compute,
     GGML_DEFAULT_GRAPH_SIZE,
 )
+from .libs.general import malloc, free
 
 ##
 ## type conversion
@@ -89,10 +90,15 @@ def get_tensor_info(tensor):
 # this assumes the data is contiguous
 # will implicity squeeze unit dimensions
 def array_to_tensor(array, tensor):
-    # check tensor type
+    # check ctype support
     ttype = get_tensor_type(tensor)
     if ttype not in gtype_to_ctype:
         raise ValueError(f'unsupported type: {ttype}')
+
+    # check dtype match
+    dtype = gtype_to_dtype[ttype]
+    if array.dtype != dtype:
+        raise ValueError(f'array dtype mismatch: {array.dtype} != {dtype}')
 
     # get data pointers
     src = array.ctypes.data
@@ -105,7 +111,7 @@ def array_to_tensor(array, tensor):
 # this makes a new array and copies
 # we want to avoid deallocating ggml buffers
 def tensor_to_array(tensor):
-    # check tensor type
+    # check ctype support
     ttype = get_tensor_type(tensor)
     if ttype not in gtype_to_dtype:
         raise ValueError(f'unsupported type: {ttype}')
@@ -123,6 +129,9 @@ def tensor_to_array(tensor):
     # copy data
     ctypes.memmove(src, dst, size)
 
+    # return array
+    return array
+
 ##
 ## context sizing and creation
 ##
@@ -132,21 +141,6 @@ def create_tensor_context(num_tensors):
     par_tensors = ggml_init_params(mem_tensors, None, True)
     ctx_tensors = ggml_init(par_tensors)
     return ctx_tensors
-
-def create_graph_context(graph_size=GGML_DEFAULT_GRAPH_SIZE):
-    # compute memory requirements for graph
-    mem_graph = (
-        ggml_graph_overhead() + ggml_tensor_overhead() * graph_size
-    )
-    arr_graph = ctypes.create_string_buffer(mem_graph)
-    buf_graph = ctypes.cast(arr_graph, ctypes.c_void_p)
-
-    # create graph context
-    par_graph = ggml_init_params(mem_graph, buf_graph, True)
-    ctx_graph = ggml_init(par_graph)
-
-    # return context
-    return ctx_graph
 
 ##
 ## tensor creation
@@ -178,11 +172,6 @@ def set_tensor_name(tensor, name):
 
 class GgmlCompute:
     def __init__(self, specs, model, backend=None):
-        # zero out model elements
-        self.backend = None
-        self.tensors = None
-        self.graph = None
-
         # construct model elements
         self.create_backend(backend)
         self.create_tensors(specs)
@@ -192,11 +181,10 @@ class GgmlCompute:
         ggml_backend_cpu_set_n_threads(self.backend, 1)
 
     def __del__(self):
-        if self.graph is not None:
-            # ggml_free(self.graph)
-            pass
-        if self.tensors is not None:
-            ggml_free(self.tensors)
+        if self.ctx_graph is not None:
+            ggml_free(self.ctx_graph)
+        if self.ctx_tensors is not None:
+            ggml_free(self.ctx_tensors)
         if self.backend is not None:
             ggml_backend_free(self.backend)
 
@@ -212,16 +200,19 @@ class GgmlCompute:
 
     def create_tensors(self, specs):
         # create tensor context
-        self.tensors = create_tensor_context(len(specs))
+        num_tensors = len(specs)
+        mem_tensors = ggml_tensor_overhead() * num_tensors
+        par_tensors = ggml_init_params(mem_tensors, None, True)
+        self.ctx_tensors = ggml_init(par_tensors)
 
         # create tensors
         self.inputs = AttrDict({
-            nam: create_tensor(self.tensors, typ, shp, nam=nam)
+            nam: create_tensor(self.ctx_tensors, typ, shp, nam=nam)
             for nam, (typ, shp) in specs.items()
         })
 
         # assign tensors on backend
-        ggml_backend_alloc_ctx_tensors(self.tensors, self.backend)
+        self.backend_buf = ggml_backend_alloc_ctx_tensors(self.ctx_tensors, self.backend)
 
     # get tensor values as numpy (copy)
     def get_input(self, name):
@@ -231,36 +222,37 @@ class GgmlCompute:
     # set tensor values using numpy
     def set_input(self, name, array):
         tensor = self.inputs[name]
-        if type(array) is not np.ndarray:
-            ttype = get_tensor_type(tensor)
-            dtype = gtype_to_dtype[ttype]
-            array = np.asarray(array, dtype=dtype)
         array_to_tensor(array, tensor)
 
     # create computational graph
-    def create_graph(self, model):
-        # create graph context (this could be a context manager)
-        ctx_graph = create_graph_context()
+    def create_graph(self, model, graph_size=GGML_DEFAULT_GRAPH_SIZE):
+        # compute memory requirements for graph
+        # NOTE: we need to keep reference to arr_graph reference around to prevent garbage collect!!!
+        mem_graph = (
+            ggml_graph_overhead() + ggml_tensor_overhead() * graph_size
+        )
+        self.arr_graph = ctypes.create_string_buffer(mem_graph)
+
+        # create graph context
+        buf_graph = ctypes.cast(self.arr_graph, ctypes.c_void_p)
+        par_graph = ggml_init_params(mem_graph, buf_graph, True)
+        self.ctx_graph = ggml_init(par_graph)
 
         # create graph and expand
-        self.graph = ggml_new_graph(ctx_graph)
-        self.output = model(ctx_graph, self.inputs)
+        self.graph = ggml_new_graph(self.ctx_graph)
+        self.output = model(self.ctx_graph, self.inputs)
         ggml_build_forward_expand(self.graph, self.output)
 
-        # free graph context
-        ggml_free(ctx_graph)
-
         # allocate buffers for graph (worst case scenario)
-        buf_type = ggml_backend_get_default_buffer_type(self.backend)
-        self.alloc = ggml_gallocr_new(buf_type)
+        self.buf_type = ggml_backend_get_default_buffer_type(self.backend)
+        self.alloc = ggml_gallocr_new(self.buf_type)
 
         # allocate tensors to buffers for graph
         ggml_gallocr_reserve(self.alloc, self.graph)
         ggml_gallocr_alloc_graph(self.alloc, self.graph)
 
-        # print memory summary
-        n_buffers = self.alloc.contents.n_buffers
-        mem_usage = ggml_gallocr_get_buffer_size(self.alloc, 0)
+        mem_worst = ggml_gallocr_get_buffer_size(self.alloc, 0)
+        print(f'compute buffer size: {mem_worst/1024:.4f} KiB')
 
     def compute(self, **values):
         # set input values
@@ -293,10 +285,7 @@ class GgmlCompute:
 ## testing
 ##
 
-def test_compute():
-    # tensor shapes
-    n_layers, embed_dim, batch_size = 50, 32, 16
-
+def test_compute(n_layers=60, embed_dim=32, batch_size=16):
     # tensor specifications
     spec_weight = {
         f'weight{i}': (GGMLQuantizationType.F32, (embed_dim, embed_dim))

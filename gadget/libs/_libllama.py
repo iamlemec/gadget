@@ -4,37 +4,13 @@
 import os
 import ctypes
 
+from .general import load_shared_lib, ctypes_function
+
 ##
 ## library
 ##
 
-# get shared library path
-if 'GADGET_LLAMA_LIB' in os.environ:
-    llama_path = os.environ['GADGET_LLAMA_LIB']
-else:
-    module_path = os.path.dirname(os.path.abspath(__file__))
-    llama_path = os.path.join(module_path, 'libllama.so')
-
-# load shared library
-try:
-    _llama = ctypes.CDLL(llama_path)
-except Exception as e:
-    raise RuntimeError(f"Failed to load shared library '{llama_path}': {e}")
-
-##
-## utils
-##
-
-def ctypes_function(library, argtypes=None, restype=None):
-    if argtypes is None:
-        argtypes = []
-    def decorator(func):
-        name = func.__name__
-        func = getattr(library, name)
-        func.argtypes = argtypes
-        func.restype = restype
-        return func
-    return decorator
+_llama = load_shared_lib('libllama.so', 'GADGET_LLAMA_LIB')
 
 ##
 ## types

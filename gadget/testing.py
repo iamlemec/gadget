@@ -1,5 +1,6 @@
 # simple ggml test
 
+import gc
 import ctypes
 import numpy as np
 
@@ -30,9 +31,31 @@ from .ggml import (
     GGML_DEFAULT_GRAPH_SIZE,
 )
 
+##
+## type conversion
+##
+
 gtype_to_ctype = {
-    GGMLQuantizationType.F32: ctypes.c_float
+    GGMLQuantizationType.F32: ctypes.c_float,
+    # GGMLQuantizationType.F16: ctypes.c_half, # not supported by ctypes
+    GGMLQuantizationType.I8: ctypes.c_int8,
+    GGMLQuantizationType.I16: ctypes.c_int16,
+    GGMLQuantizationType.I32: ctypes.c_int32,
+    GGMLQuantizationType.I64: ctypes.c_int64,
 }
+
+gtype_to_dtype = {
+    GGMLQuantizationType.F32: np.float32,
+    # GGMLQuantizationType.F16: np.float16, # not supported by ctypes
+    GGMLQuantizationType.I8: np.int8,
+    GGMLQuantizationType.I16: np.int16,
+    GGMLQuantizationType.I32: np.int32,
+    GGMLQuantizationType.I64: np.int64,
+}
+
+##
+## tensor utilities
+##
 
 def trim_nelem(shape):
     dims = 1 + max([
@@ -40,19 +63,70 @@ def trim_nelem(shape):
     ], default=0)
     return shape[:dims]
 
+def get_tensor_name(tensor):
+    value = tensor.contents
+    return value.name.decode('utf-8')
+
 def get_tensor_shape(tensor, raw=False):
     value = tensor.contents
     nelem = tuple(value.ne[:4])
     return trim_nelem(nelem)[::-1]
 
-def tensor_to_numpy(tensor):
+def get_tensor_type(tensor):
     value = tensor.contents
-    if value.type not in gtype_to_ctype:
-        raise ValueError(f'unsupported type: {value.type}')
-    ctype = gtype_to_ctype[value.type]
+    return GGMLQuantizationType(value.type)
+
+def get_tensor_info(tensor):
+    name = get_tensor_name(tensor)
+    ttype = get_tensor_type(tensor)
     shape = get_tensor_shape(tensor)
-    p = ctypes.cast(value.data, ctypes.POINTER(ctype))
-    return np.ctypeslib.as_array(p, shape=shape)
+    stat = f'{name}: {ttype.name} × {shape}'
+    return stat
+
+# this assumes the data is contiguous
+# will implicity squeeze unit dimensions
+def array_to_tensor(array, tensor):
+    # check ctype support
+    ttype = get_tensor_type(tensor)
+    if ttype not in gtype_to_ctype:
+        raise ValueError(f'unsupported type: {ttype}')
+
+    # check dtype match
+    dtype = gtype_to_dtype[ttype]
+    if array.dtype != dtype:
+        raise ValueError(f'array dtype mismatch: {array.dtype} != {dtype}')
+
+    # get data pointers
+    src = array.ctypes.data
+    dst = tensor.contents.data
+    size = array.nbytes
+
+    # copy data
+    ctypes.memmove(dst, src, size)
+
+# this makes a new array and copies
+# we want to avoid deallocating ggml buffers
+def tensor_to_array(tensor):
+    # check ctype support
+    ttype = get_tensor_type(tensor)
+    if ttype not in gtype_to_dtype:
+        raise ValueError(f'unsupported type: {ttype}')
+
+    # get data pointers
+    src = tensor.contents.data
+    shape = get_tensor_shape(tensor)
+    dtype = gtype_to_dtype[ttype]
+
+    # create numpy array
+    array = np.empty(shape, dtype=dtype)
+    dst = array.ctypes.data
+    size = array.nbytes
+
+    # copy data
+    ctypes.memmove(src, dst, size)
+
+    # return array
+    return array
 
 def test_context():
     # tensor shapes
@@ -156,35 +230,33 @@ def test_backend():
     # build graph from network
     ggml_build_forward_expand(graph, outputs)
 
-    # free graph context
-    ggml_free(ctx_graph)
-
     # allocate buffers for graph (worst case scenario)
     buf_type = ggml_backend_get_default_buffer_type(backend)
     allocr = ggml_gallocr_new(buf_type)
     ggml_gallocr_reserve(allocr, graph)
     ggml_gallocr_alloc_graph(allocr, graph)
     mem_worst = ggml_gallocr_get_buffer_size(allocr, 0)
-    print(f'compute buffer size: {mem_worst/1024:.4f} KB\n')
+    print(f'compute buffer size: {mem_worst/1024:.4f} KiB')
 
     # set backend runtime options
     ggml_backend_cpu_set_n_threads(backend, 1)
 
     # set weights and biases
     for i in range(n_layers):
-        weights_np = tensor_to_numpy(weights[i])
-        biases_np = tensor_to_numpy(biases[i])
-        weights_np[...] = np.random.randn(embed_dim, embed_dim).astype(np.float32)
-        biases_np[...] = np.random.randn(embed_dim).astype(np.float32)
+        weight_np = np.random.randn(embed_dim, embed_dim).astype(np.float32)
+        biase_np = np.random.randn(embed_dim).astype(np.float32)
+        array_to_tensor(weight_np, weights[i])
+        array_to_tensor(biase_np, biases[i])
 
     # set input data
-    inputs_np = tensor_to_numpy(inputs)
-    inputs_np[...] = np.random.randn(batch_size, embed_dim).astype(np.float32)
+    inputs_np = np.random.randn(batch_size, embed_dim).astype(np.float32)
+    array_to_tensor(inputs_np, inputs)
 
     # do computation
     ggml_backend_graph_compute(backend, graph)
 
     # get results
-    outputs_np = tensor_to_numpy(outputs)
+    outputs_np = tensor_to_array(outputs)
 
-    return graph, inputs, outputs, weights, biases
+    # return locals()
+    return graph, buf_graph

@@ -3,39 +3,29 @@
 import os
 import ctypes
 
+from .general import load_shared_lib, ctypes_function
 from .constants import GGMLQuantizationType
 
 ##
 ## library
 ##
 
-# get shared library path
-if 'GADGET_GGML_LIB' in os.environ:
-    ggml_path = os.environ['GADGET_GGML_LIB']
-else:
-    module_path = os.path.dirname(os.path.abspath(__file__))
-    ggml_path = os.path.join(module_path, 'libggml.so')
-
-# load shared library
-try:
-    _ggml = ctypes.CDLL(ggml_path)
-except Exception as e:
-    raise RuntimeError(f"Failed to load shared library '{ggml_path}': {e}")
+_ggml = load_shared_lib('libggml.so', 'GADGET_GGML_LIB')
 
 ##
-## utils
+## function wrappers
 ##
 
-def ctypes_function(library, argtypes=None, restype=None):
-    if argtypes is None:
-        argtypes = []
-    def decorator(func):
-        name = func.__name__
-        func = getattr(library, name)
-        func.argtypes = argtypes
-        func.restype = restype
-        return func
-    return decorator
+def get_tensor_type(tensor):
+    value = tensor.contents
+    return GGMLQuantizationType(value.type)
+
+def get_tensor_nelem(tensor):
+    value = tensor.contents
+    return tuple(value.ne[:4])
+
+def get_input_info(*args):
+    return ' '.join([str(get_tensor_nelem(tensor)) for tensor in args])
 
 def named_output(func):
     def wrapper(*args, name=None):
@@ -44,13 +34,6 @@ def named_output(func):
             ggml_set_name(c, name.encode('utf-8'))
         return c
     return wrapper
-
-def get_tensor_nelem(tensor):
-    value = tensor.contents
-    return tuple(value.ne[:4])
-
-def get_input_info(*args):
-    return ' '.join([str(get_tensor_nelem(tensor)) for tensor in args])
 
 def check_inputs(check):
     def outer(func):
@@ -68,17 +51,9 @@ def check_inputs(check):
 ## some of these are copies of inlined functions
 ##
 
-def get_tensor_nelem(tensor, raw=False):
-    value = tensor.contents
-    return tuple(value.ne[:4])
-
-def get_tensor_type(tensor):
-    value = tensor.contents
-    return GGMLQuantizationType(value.type)
-
 def ggml_can_mul_mat(t0, t1):
-    ne0 = get_tensor_nelem(t0, raw=True)
-    ne1 = get_tensor_nelem(t1, raw=True)
+    ne0 = get_tensor_nelem(t0)
+    ne1 = get_tensor_nelem(t1)
     return (
         (ne0[0] == ne1[0]     ) and
         (ne0[2]  % ne1[2] == 0) and
