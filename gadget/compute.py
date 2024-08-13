@@ -34,6 +34,10 @@ from .ggml import (
     GGML_DEFAULT_GRAPH_SIZE,
 )
 
+##
+## type conversion
+##
+
 gtype_to_ctype = {
     GGMLQuantizationType.F32: ctypes.c_float,
     # GGMLQuantizationType.F16: ctypes.c_half, # not supported by ctypes
@@ -42,6 +46,19 @@ gtype_to_ctype = {
     GGMLQuantizationType.I32: ctypes.c_int32,
     GGMLQuantizationType.I64: ctypes.c_int64,
 }
+
+gtype_to_dtype = {
+    GGMLQuantizationType.F32: np.float32,
+    # GGMLQuantizationType.F16: np.float16, # not supported by ctypes
+    GGMLQuantizationType.I8: np.int8,
+    GGMLQuantizationType.I16: np.int16,
+    GGMLQuantizationType.I32: np.int32,
+    GGMLQuantizationType.I64: np.int64,
+}
+
+##
+## tensor utilities
+##
 
 def trim_nelem(shape):
     dims = 1 + max([
@@ -64,14 +81,44 @@ def get_tensor_info(tensor):
 
 # this assumes the data is contiguous
 # will implicity squeeze unit dimensions
-def tensor_to_numpy(tensor):
-    value = tensor.contents
-    if value.type not in gtype_to_ctype:
+def array_to_tensor(array, tensor_p):
+    # check tensor type
+    tensor = tensor_p.contents
+    if tensor.type not in gtype_to_ctype:
         raise ValueError(f'unsupported type: {value.type}')
-    ctype = gtype_to_ctype[value.type]
-    shape = get_tensor_shape(tensor)
-    p = ctypes.cast(value.data, ctypes.POINTER(ctype))
-    return np.ctypeslib.as_array(p, shape=shape)
+
+    # get data pointers
+    src = array.ctypes.data
+    dst = tensor.data
+    size = array.nbytes
+
+    # copy data
+    ctypes.memmove(dst, src, size)
+
+# this makes a new array and copies
+# we want to avoid deallocating ggml buffers
+def tensor_to_array(tensor_p):
+    # check tensor type
+    tensor = tensor_p.contents
+    if tensor.type not in gtype_to_dtype:
+        raise ValueError(f'unsupported type: {value.type}')
+
+    # get data pointers
+    src = tensor.data
+    shape = get_tensor_shape(tensor_p)
+    dtype = gtype_to_dtype[tensor.type]
+
+    # create numpy array
+    array = np.empty(shape, dtype=dtype)
+    dst = array.ctypes.data
+    size = array.nbytes
+
+    # copy data
+    ctypes.memmove(src, dst, size)
+
+##
+## context sizing and creation
+##
 
 def create_tensor_context(num_tensors):
     mem_tensors = ggml_tensor_overhead() * num_tensors
@@ -94,6 +141,10 @@ def create_graph_context(graph_size=GGML_DEFAULT_GRAPH_SIZE):
     # return context
     return ctx_graph
 
+##
+## tensor creation
+##
+
 # dispatch create functions
 create_funcs = {
     1: ggml_new_tensor_1d,
@@ -113,6 +164,10 @@ def create_tensor(ctx, typ, shp, nam=None):
 
 def set_tensor_name(tensor, name):
     ggml_set_name(tensor, name.encode('utf-8'))
+
+##
+## compute interface
+##
 
 class GgmlCompute:
     def __init__(self, specs, model, backend=None):
@@ -161,20 +216,15 @@ class GgmlCompute:
         # assign tensors on backend
         ggml_backend_alloc_ctx_tensors(self.tensors, self.backend)
 
-        # create numpy accessors
-        self.inputs_np = AttrDict({
-            nam: tensor_to_numpy(ten)
-            for nam, ten in self.inputs.items()
-        })
-
-    # return tensor numpy view
+    # get tensor values as numpy (copy)
     def get_input(self, name):
-        return self.inputs_np[name]
+        tensor = self.inputs[name]
+        return tensor_to_array(tensor)
 
     # set tensor values using numpy
-    def set_input(self, name, value):
-        ten_np = self.inputs_np[name]
-        ten_np[...] = value
+    def set_input(self, name, array):
+        tensor = self.inputs[name]
+        array_to_tensor(array, tensor)
 
     # create computational graph
     def create_graph(self, model):
@@ -210,7 +260,7 @@ class GgmlCompute:
         ggml_backend_graph_compute(self.backend, self.graph)
 
         # get results
-        output_np = tensor_to_numpy(self.output)
+        output_np = tensor_to_array(self.output)
 
         # return results
         return output_np
@@ -227,6 +277,10 @@ class GgmlCompute:
 
     def __call__(self, **values):
         return self.compute(**values)
+
+##
+## testing
+##
 
 def test_compute():
     # tensor shapes

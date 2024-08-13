@@ -13,6 +13,10 @@ from .loader import GgufFile
 from .compute import set_tensor_name
 from .model import GgmlModel
 
+##
+## bert model
+##
+
 class BertModel(GgmlModel):
     @classmethod
     def from_gguf(cls, gguf, batch_size=None):

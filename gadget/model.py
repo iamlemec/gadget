@@ -7,6 +7,10 @@ from .ggml import GGMLQuantizationType, ggml_mul_mat, ggml_add
 from .loader import GgufFile
 from .compute import GgmlCompute, set_tensor_name
 
+##
+## model interface
+##
+
 class GgmlModel(GgmlCompute):
     def __init__(self, params, inputs, backend=None, **kwargs):
         for k, v in kwargs.items():
@@ -38,6 +42,10 @@ class GgmlModel(GgmlCompute):
 
     def forward(self, ctx, inputs):
         raise NotImplementedError('forward method must be implemented')
+
+##
+## testing
+##
 
 def test_model():
     class TestModel(GgmlModel):
