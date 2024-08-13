@@ -89,11 +89,12 @@ def test_model():
         x: Tensor('F32', ('batch_size', 'embed_dim'))
 
         def forward(self):
+            ctx = self.ctx_graph
             x = self.inputs.x
             for i in range(self.hparams['n_layers']):
                 weight, bias = self.inputs[f'weight{i}'], self.inputs[f'bias{i}']
-                x = ggml_mul_mat(self.ctx_graph, weight, x, name=f'a{i}')
-                x = ggml_add(self.ctx_graph, x, bias, name=f'b{i}')
+                x = ggml_mul_mat(ctx, weight, x, name=f'a{i}')
+                x = ggml_add(ctx, x, bias, name=f'b{i}')
             return x
 
     # define model hparams

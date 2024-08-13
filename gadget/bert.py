@@ -11,65 +11,76 @@ from .ggml import (
 )
 from .loader import GgufFile
 from .compute import set_tensor_name
-from .model import GgmlModel
+from .model import GgmlModel, Tensor
 
 ##
 ## bert model
 ##
 
 class BertModel(GgmlModel):
-    @classmethod
-    def from_gguf(cls, gguf, batch_size=None):
-        # get hparams
-        if batch_size is None:
-            batch_size = gguf.get_field('bert.context_length')
-        embed_dim = gguf.get_field('bert.embedding_length')
-
-        # model inputs
-        inputs = dict(
-            tokens = (GGMLQuantizationType.I32, (batch_size,)),
-            positions = (GGMLQuantizationType.I32, (batch_size,)),
-        )
-
-        # load model (this sets params)
-        self = super().from_gguf(
-            gguf, inputs, batch_size=batch_size, embed_dim=embed_dim
-        )
-
-        # return model
-        return self
+    tokens   : Tensor('I32', ('batch_size',))
+    positions: Tensor('I32', ('batch_size',))
 
     # model function (comments are numpy shapes)
-    def forward(self, ctx, inp):
+    def forward(self):
+        ctx = self.ctx_graph
+
+        # get hparams
+        embed_dim = self.hparams['bert.embedding_length']
+
+        # get weights
+        token_embd = self.inputs['token_embd.weight']
+        token_types = self.inputs['token_types.weight']
+        position_embd = self.inputs['position_embd.weight']
+
+        # get inputs
+        tokens = self.inputs['tokens']
+        positions = self.inputs['positions']
+
         # get token embeddings
         embed = ggml_get_rows(
-            ctx, inp['token_embd.weight'], inp.tokens, name='embed'
+            ctx, token_embd, tokens, name='embed'
         ) # [batch_size, embed_dim]
 
         # get token type embeddings
         embed = ggml_add_inplace(ctx, embed, ggml_view_1d(
-            ctx, inp['token_types.weight'], self.embed_dim, 0, name='typ_embed'
+            ctx, token_types, embed_dim, 0, name='typ_embed'
         ))
 
         # get positional embeddings
         embed = ggml_add_inplace(ctx, embed, ggml_get_rows(
-            ctx, inp['position_embd.weight'], inp.positions, name='pos_embed'
+            ctx, position_embd, positions, name='pos_embed'
         ))
 
         # return embedding
         return embed
 
     def embed(self, tokens):
+        batch_size = self.hparams['batch_size']
+
         # validate input tokens
         tokens = np.asarray(tokens, dtype=np.int32)
-        if tokens.shape != (self.batch_size,):
+        if tokens.shape != (batch_size,):
             raise ValueError('tokens must be an array of shape (batch_size,)')
 
         # generate token positions
-        positions = np.arange(self.batch_size, dtype=np.int32)
+        positions = np.arange(batch_size, dtype=np.int32)
 
         # compute on input data
         embed = self.compute(tokens=tokens, positions=positions)
 
         # return embedding
         return embed
+
+def test_bert(gguf_path, batch_size=512):
+    # load model
+    model = BertModel.from_path(gguf_path, batch_size=batch_size)
+
+    # make some tokens
+    tokens = np.arange(batch_size, dtype=np.int32)
+
+    # embed tokens
+    embed = model.embed(tokens)
+
+    # return model
+    return model
