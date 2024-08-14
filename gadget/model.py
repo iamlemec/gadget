@@ -35,15 +35,15 @@ def resolve_field(key, *dicts):
 ##
 
 class GgmlModel(GgmlCompute):
-    def __init__(self, hparams, weights, inputs, backend=None):
+    def __init__(self, params, weights, inputs, backend=None):
         def forward(*args):
             return self.forward()
-        super().__init__(hparams, weights | inputs, forward, backend=backend)
+        super().__init__(params, weights | inputs, forward, backend=backend)
 
     @classmethod
     def from_gguf(cls, gguf, backend=None, **kwargs):
         # get hparams (shallow copy)
-        hparams = gguf.fields | kwargs
+        params = gguf.fields | kwargs
 
         # get metadata from gguf
         weights = {
@@ -58,12 +58,12 @@ class GgmlModel(GgmlCompute):
 
         # resolve string fields
         inputs = {
-            k: (t, [resolve_field(x, hparams) for x in s])
+            k: (t, [resolve_field(x, params) for x in s])
             for k, (t, s) in hints.items()
         }
 
         # create model and graph
-        self = cls(hparams, weights, inputs, backend=backend)
+        self = cls(params, weights, inputs, backend=backend)
 
         # assign tensors on backend
         for name, (ttype, tensor) in gguf.tensors.items():
@@ -84,21 +84,28 @@ class GgmlModel(GgmlCompute):
 ## testing
 ##
 
-def test_model():
+def test_model(n_layers=50, embed_dim=32, batch_size=16):
+    # simple model interface
     class TestModel(GgmlModel):
+        # strings dimensions are filled in dynamically
         x: Tensor('F32', ('batch_size', 'embed_dim'))
 
         def forward(self):
-            ctx = self.ctx_graph
-            x = self.inputs.x
-            for i in range(self.hparams['n_layers']):
-                weight, bias = self.inputs[f'weight{i}'], self.inputs[f'bias{i}']
+            # get contexta and inputs
+            ctx, x = self.ctx_graph, self.tensors['x']
+            n_layers = self.params['n_layers']
+
+            # loop through layers
+            for i in range(n_layers):
+                # get layer weights
+                weight, bias = self.tensors[f'weight{i}'], self.tensors[f'bias{i}']
+
+                # apply layer function
                 x = ggml_mul_mat(ctx, weight, x, name=f'a{i}')
                 x = ggml_add(ctx, x, bias, name=f'b{i}')
-            return x
 
-    # define model hparams
-    n_layers, embed_dim, batch_size = 50, 32, 16
+            # return final embed
+            return x
 
     # create dummy gguf
     gguf = GgufFile()

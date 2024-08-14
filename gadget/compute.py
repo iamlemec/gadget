@@ -39,7 +39,7 @@ from .libs.general import malloc, free
 ## type conversion
 ##
 
-gtype_to_ctype = {
+ttype_to_ctype = {
     GGMLQuantizationType.F32: ctypes.c_float,
     # GGMLQuantizationType.F16: ctypes.c_half, # not supported by ctypes
     GGMLQuantizationType.I8: ctypes.c_int8,
@@ -48,7 +48,7 @@ gtype_to_ctype = {
     GGMLQuantizationType.I64: ctypes.c_int64,
 }
 
-gtype_to_dtype = {
+ttype_to_dtype = {
     GGMLQuantizationType.F32: np.float32,
     # GGMLQuantizationType.F16: np.float16, # not supported by ctypes
     GGMLQuantizationType.I8: np.int8,
@@ -92,11 +92,11 @@ def get_tensor_info(tensor):
 def array_to_tensor(array, tensor):
     # check ctype support
     ttype = get_tensor_type(tensor)
-    if ttype not in gtype_to_ctype:
+    if ttype not in ttype_to_ctype:
         raise ValueError(f'unsupported type: {ttype}')
 
     # check dtype match
-    dtype = gtype_to_dtype[ttype]
+    dtype = ttype_to_dtype[ttype]
     if array.dtype != dtype:
         raise ValueError(f'array dtype mismatch: {array.dtype} != {dtype}')
 
@@ -113,13 +113,13 @@ def array_to_tensor(array, tensor):
 def tensor_to_array(tensor):
     # check ctype support
     ttype = get_tensor_type(tensor)
-    if ttype not in gtype_to_dtype:
+    if ttype not in ttype_to_dtype:
         raise ValueError(f'unsupported type: {ttype}')
 
     # get data pointers
     src = tensor.contents.data
     shape = get_tensor_shape(tensor)
-    dtype = gtype_to_dtype[ttype]
+    dtype = ttype_to_dtype[ttype]
 
     # create numpy array
     array = np.empty(shape, dtype=dtype)
@@ -171,11 +171,11 @@ def set_tensor_name(tensor, name):
 ##
 
 class GgmlCompute:
-    def __init__(self, hparams, specs, model, backend=None):
+    def __init__(self, params, tensors, model, backend=None):
         # construct model elements
-        self.create_hparams(hparams)
+        self.create_params(params)
         self.create_backend(backend)
-        self.create_tensors(specs)
+        self.create_tensors(tensors)
         self.create_graph(model)
 
         # set backend runtime options
@@ -189,8 +189,8 @@ class GgmlCompute:
         if self.backend is not None:
             ggml_backend_free(self.backend)
 
-    def create_hparams(self, hparams):
-        self.hparams = hparams
+    def create_params(self, params):
+        self.params = params
 
     def create_backend(self, name):
         if name is None or name == 'cpu':
@@ -210,7 +210,7 @@ class GgmlCompute:
         self.ctx_tensors = ggml_init(par_tensors)
 
         # create tensors
-        self.inputs = AttrDict({
+        self.tensors = AttrDict({
             nam: create_tensor(self.ctx_tensors, typ, shp, nam=nam)
             for nam, (typ, shp) in specs.items()
         })
@@ -220,12 +220,12 @@ class GgmlCompute:
 
     # get tensor values as numpy (copy)
     def get_input(self, name):
-        tensor = self.inputs[name]
+        tensor = self.tensors[name]
         return tensor_to_array(tensor)
 
     # set tensor values using numpy
     def set_input(self, name, array):
-        tensor = self.inputs[name]
+        tensor = self.tensors[name]
         array_to_tensor(array, tensor)
 
     # create computational graph
@@ -244,7 +244,7 @@ class GgmlCompute:
 
         # create graph and expand
         self.graph = ggml_new_graph(self.ctx_graph)
-        self.output = model(self.ctx_graph, self.hparams, self.inputs)
+        self.output = model(self.ctx_graph, self.params, self.tensors)
         ggml_build_forward_expand(self.graph, self.output)
 
         # allocate buffers for graph (worst case scenario)
@@ -277,7 +277,7 @@ class GgmlCompute:
         graph = self.graph.contents
         lines = (
             [f'{name}(backend={self.backend_name})'] + ['', 'INPUTS'] +
-            [get_tensor_info(tensor) for tensor in self.inputs.values()] + ['', 'GRAPH'] +
+            [get_tensor_info(tensor) for tensor in self.tensors.values()] + ['', 'GRAPH'] +
             [get_tensor_info(graph.nodes[i]) for i in range(graph.n_nodes)]
         )
         return '\n'.join(lines)
@@ -291,35 +291,34 @@ class GgmlCompute:
 
 def test_compute(n_layers=60, embed_dim=32, batch_size=16):
     # model parameters
-    hparams = dict(
+    params = dict(
         n_layers=n_layers, embed_dim=embed_dim, batch_size=batch_size
     )
 
     # tensor specifications
-    spec_weight = {
+    tensors_weight = {
         f'weight{i}': (GGMLQuantizationType.F32, (embed_dim, embed_dim))
         for i in range(n_layers)
     }
-    spec_bias = {
+    tensors_bias = {
         f'bias{i}': (GGMLQuantizationType.F32, (embed_dim,))
         for i in range(n_layers)
     }
-    spec_input = {
-        'x': (GGMLQuantizationType.F32, (batch_size, embed_dim))
+    tensors_input = {
+        'input': (GGMLQuantizationType.F32, (batch_size, embed_dim))
     }
-    spec = spec_weight | spec_bias | spec_input
+    tensors = tensors_weight | tensors_bias | tensors_input
 
     # define model function
-    def test_model(ctx, par, inp):
-        n = par['n_layers']
-        x = inp['x']
+    def test_model(ctx, par, ten):
+        n, x = par['n_layers'], ten['input']
         for i in range(n_layers):
-            x = ggml_mul_mat(ctx, inp[f'weight{i}'], x, name=f'a{i}')
-            x = ggml_add(ctx, x, inp[f'bias{i}'], name=f'b{i}')
+            x = ggml_mul_mat(ctx, ten[f'weight{i}'], x, name=f'a{i}')
+            x = ggml_add(ctx, x, ten[f'bias{i}'], name=f'b{i}')
         return x
 
     # create model graph
-    model = GgmlCompute(hparams, spec, test_model)
+    model = GgmlCompute(params, tensors, test_model)
 
     # set weights and biases
     for i in range(n_layers):
@@ -329,8 +328,8 @@ def test_compute(n_layers=60, embed_dim=32, batch_size=16):
         model.set_input(f'bias{i}', bias)
 
     # compute on input data
-    x = np.random.randn(batch_size, embed_dim).astype(np.float32)
-    output_np = model.compute(x=x)
+    input = np.random.randn(batch_size, embed_dim).astype(np.float32)
+    output_np = model.compute(input=input)
 
     # return model
     return model

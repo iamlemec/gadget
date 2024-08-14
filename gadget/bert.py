@@ -26,16 +26,16 @@ class BertModel(GgmlModel):
         ctx = self.ctx_graph
 
         # get hparams
-        embed_dim = self.hparams['bert.embedding_length']
+        embed_dim = self.params['bert.embedding_length']
 
         # get weights
-        token_embd = self.inputs['token_embd.weight']
-        token_types = self.inputs['token_types.weight']
-        position_embd = self.inputs['position_embd.weight']
+        token_embd = self.tensors['token_embd.weight']
+        token_types = self.tensors['token_types.weight']
+        position_embd = self.tensors['position_embd.weight']
 
         # get inputs
-        tokens = self.inputs['tokens']
-        positions = self.inputs['positions']
+        tokens = self.tensors['tokens']
+        positions = self.tensors['positions']
 
         # get token embeddings
         embed = ggml_get_rows(
@@ -56,7 +56,7 @@ class BertModel(GgmlModel):
         return embed
 
     def embed(self, tokens):
-        batch_size = self.hparams['batch_size']
+        batch_size = self.params['batch_size']
 
         # validate input tokens
         tokens = np.asarray(tokens, dtype=np.int32)
