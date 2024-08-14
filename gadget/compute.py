@@ -172,14 +172,10 @@ def set_tensor_name(tensor, name):
 
 class GgmlCompute:
     def __init__(self, params, tensors, model, backend=None):
-        # construct model elements
         self.create_params(params)
         self.create_backend(backend)
         self.create_tensors(tensors)
         self.create_graph(model)
-
-        # set backend runtime options
-        ggml_backend_cpu_set_n_threads(self.backend, 1)
 
     def __del__(self):
         if self.ctx_graph is not None:
@@ -289,47 +285,43 @@ class GgmlCompute:
 ## testing
 ##
 
-def test_compute(n_layers=60, embed_dim=32, batch_size=16):
+def test_compute(input_dim=64, output_dim=32, batch_size=16):
     # model parameters
     params = dict(
-        n_layers=n_layers, embed_dim=embed_dim, batch_size=batch_size
+        input_dim=input_dim, output_dim=output_dim, batch_size=batch_size
     )
 
     # tensor specifications
-    tensors_weight = {
-        f'weight{i}': (GGMLQuantizationType.F32, (embed_dim, embed_dim))
-        for i in range(n_layers)
-    }
-    tensors_bias = {
-        f'bias{i}': (GGMLQuantizationType.F32, (embed_dim,))
-        for i in range(n_layers)
-    }
-    tensors_input = {
-        'input': (GGMLQuantizationType.F32, (batch_size, embed_dim))
-    }
-    tensors = tensors_weight | tensors_bias | tensors_input
+    tensors = dict(
+        a = (GGMLQuantizationType.F32, (output_dim, input_dim)),
+        b = (GGMLQuantizationType.F32, (output_dim,)),
+        x = (GGMLQuantizationType.F32, (batch_size, input_dim)),
+    )
 
     # define model function
     def test_model(ctx, par, ten):
-        n, x = par['n_layers'], ten['input']
-        for i in range(n_layers):
-            x = ggml_mul_mat(ctx, ten[f'weight{i}'], x, name=f'a{i}')
-            x = ggml_add(ctx, x, ten[f'bias{i}'], name=f'b{i}')
-        return x
+        n, m = par['input_dim'], par['output_dim']
+        a, b, x = ten['a'], ten['b'], ten['x']
+        x1 = ggml_mul_mat(ctx, a, x, name=f'x1')
+        x2 = ggml_add(ctx, x1, b, name=f'x2')
+        return x2
 
     # create model graph
     model = GgmlCompute(params, tensors, test_model)
 
-    # set weights and biases
-    for i in range(n_layers):
-        weight = np.random.randn(embed_dim, embed_dim).astype(np.float32)
-        bias = np.random.randn(embed_dim).astype(np.float32)
-        model.set_input(f'weight{i}', weight)
-        model.set_input(f'bias{i}', bias)
+    # set weights
+    a_np = np.random.randn(output_dim, input_dim).astype(np.float32)
+    b_np = np.random.randn(output_dim).astype(np.float32)
+    model.set_input('a', a_np)
+    model.set_input('b', b_np)
 
     # compute on input data
-    input = np.random.randn(batch_size, embed_dim).astype(np.float32)
-    output_np = model.compute(input=input)
+    x_np = np.random.randn(batch_size, input_dim).astype(np.float32)
+    y_np = model(x=x_np)
+
+    # get numpy results
+    y0_np = (x_np @ a_np.T) + b_np[None,:]
+    np.allclose(y_np, y0_np)
 
     # return model
     return model

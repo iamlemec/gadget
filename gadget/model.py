@@ -34,11 +34,16 @@ def resolve_field(key, *dicts):
 ## model interface
 ##
 
+def freeze(func):
+    def wrapper(*args, **kwargs):
+        return func()
+    return wrapper
+
 class GgmlModel(GgmlCompute):
     def __init__(self, params, weights, inputs, backend=None):
-        def forward(*args):
-            return self.forward()
-        super().__init__(params, weights | inputs, forward, backend=backend)
+        super().__init__(
+            params, weights | inputs, freeze(self.forward), backend=backend
+        )
 
     @classmethod
     def from_gguf(cls, gguf, backend=None, **kwargs):
@@ -84,48 +89,48 @@ class GgmlModel(GgmlCompute):
 ## testing
 ##
 
-def test_model(n_layers=50, embed_dim=32, batch_size=16):
+def test_model(input_dim=64, output_dim=32, batch_size=16):
     # simple model interface
     class TestModel(GgmlModel):
         # strings dimensions are filled in dynamically
-        x: Tensor('F32', ('batch_size', 'embed_dim'))
+        x: Tensor('F32', ('batch_size', 'input_dim'))
 
         def forward(self):
-            # get contexta and inputs
-            ctx, x = self.ctx_graph, self.tensors['x']
-            n_layers = self.params['n_layers']
+            # get contexts and inputs
+            ctx, x, a, b = (
+                self.ctx_graph, self.tensors['x'], 
+                self.tensors['a'], self.tensors['b']
+            )
 
-            # loop through layers
-            for i in range(n_layers):
-                # get layer weights
-                weight, bias = self.tensors[f'weight{i}'], self.tensors[f'bias{i}']
+            # apply function
+            x1 = ggml_mul_mat(ctx, a, x, name=f'x1')
+            x2 = ggml_add(ctx, x1, b, name=f'x2')
 
-                # apply layer function
-                x = ggml_mul_mat(ctx, weight, x, name=f'a{i}')
-                x = ggml_add(ctx, x, bias, name=f'b{i}')
+            # return result
+            return x2
 
-            # return final embed
-            return x
+    # generate weights
+    a_np = np.random.randn(output_dim, input_dim).astype(np.float32)
+    b_np = np.random.randn(output_dim).astype(np.float32)
 
     # create dummy gguf
     gguf = GgufFile()
     gguf.set_field('name', b'test')
-    gguf.set_field('n_layers', n_layers, dtype=np.uint64)
-    gguf.set_field('embed_dim', embed_dim, dtype=np.uint64)
-
-    # add layers
-    for i in range(n_layers):
-        weight = np.random.randn(embed_dim, embed_dim).astype(np.float32)
-        bias = np.random.randn(embed_dim).astype(np.float32)
-        gguf.set_tensor(f'weight{i}', weight)
-        gguf.set_tensor(f'bias{i}', bias)
+    gguf.set_field('input_dim', input_dim, dtype=np.int64)
+    gguf.set_field('output_dim', output_dim, dtype=np.int64)
+    gguf.set_tensor('a', a_np)
+    gguf.set_tensor('b', b_np)
 
     # load gguf as model
     model = TestModel.from_gguf(gguf, batch_size=batch_size)
 
     # compute on input data
-    x = np.random.randn(batch_size, embed_dim).astype(np.float32)
-    output_np = model(x=x)
+    x_np = np.random.randn(batch_size, input_dim).astype(np.float32)
+    y_np = model(x=x_np)
+
+    # get numpy results
+    y0_np = (x_np @ a_np.T) + b_np[None,:]
+    np.allclose(y_np, y0_np)
 
     # return model
     return model

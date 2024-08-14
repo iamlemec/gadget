@@ -4,11 +4,5 @@ import gc
 import gadget.testing
 
 # test low level interface
-results = gadget.testing.test_backend()
-
-# free memory
-print(gc.collect())
-
-# print results
-graph = results[0]
-print(graph.contents.n_nodes)
+input_np, output_np = gadget.testing.test_backend()
+print(input_np.shape, output_np.shape)

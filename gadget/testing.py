@@ -259,4 +259,4 @@ def test_backend():
     outputs_np = tensor_to_array(outputs)
 
     # return locals()
-    return graph, buf_graph
+    return inputs_np, outputs_np

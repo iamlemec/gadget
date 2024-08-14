@@ -40,7 +40,7 @@ class BertModel(GgmlModel):
         # get token embeddings
         embed = ggml_get_rows(
             ctx, token_embd, tokens, name='embed'
-        ) # [batch_size, embed_dim]
+        )
 
         # get token type embeddings
         embed = ggml_add_inplace(ctx, embed, ggml_view_1d(
