@@ -67,7 +67,7 @@ class BertModel(GgmlModel):
         positions = np.arange(batch_size, dtype=np.int32)
 
         # compute on input data
-        embed = self.compute(tokens=tokens, positions=positions)
+        embed = self(tokens=tokens, positions=positions)
 
         # return embedding
         return embed
@@ -83,4 +83,4 @@ def test_bert(gguf_path, batch_size=512):
     embed = model.embed(tokens)
 
     # return model
-    return model
+    return model, tokens, embed

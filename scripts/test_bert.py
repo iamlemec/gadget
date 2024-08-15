@@ -1,18 +1,11 @@
 # test bert model
 
 import numpy as np
-from gadget.bert import BertModel
+import gadget.bert as bert
 
 # configure
 gguf_path = '/home/doug/fast/embed/bge-micro-v2-f32.gguf'
-batch_size = 512
+model, embed = bert.test_bert(gguf_path)
 
-# load model
-bert = BertModel.from_path(gguf_path, batch_size=batch_size)
-print(bert)
-
-# make some tokens
-tokens = np.arange(batch_size, dtype=np.int32)
-
-# embed tokens
-embed = bert.embed(tokens)
+# print results
+print(embed)

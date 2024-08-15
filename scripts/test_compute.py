@@ -2,5 +2,5 @@
 
 import gadget
 
-model = gadget.compute.test_compute()
-print(model)
+match = gadget.compute.test_compute()
+print(match)

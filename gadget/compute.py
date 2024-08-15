@@ -16,8 +16,6 @@ from .ggml import (
     ggml_new_tensor_3d,
     ggml_new_tensor_4d,
     ggml_set_name,
-    ggml_mul_mat,
-    ggml_add,
     ggml_new_graph,
     ggml_build_forward_expand,
     ggml_backend_cpu_init,
@@ -127,20 +125,10 @@ def tensor_to_array(tensor):
     size = array.nbytes
 
     # copy data
-    ctypes.memmove(src, dst, size)
+    ctypes.memmove(dst, src, size)
 
     # return array
     return array
-
-##
-## context sizing and creation
-##
-
-def create_tensor_context(num_tensors):
-    mem_tensors = ggml_tensor_overhead() * num_tensors
-    par_tensors = ggml_init_params(mem_tensors, None, True)
-    ctx_tensors = ggml_init(par_tensors)
-    return ctx_tensors
 
 ##
 ## tensor creation
@@ -286,6 +274,8 @@ class GgmlCompute:
 ##
 
 def test_compute(input_dim=64, output_dim=32, batch_size=16):
+    from .ggml import ggml_mul_mat, ggml_add
+
     # model parameters
     params = dict(
         input_dim=input_dim, output_dim=output_dim, batch_size=batch_size
@@ -321,7 +311,7 @@ def test_compute(input_dim=64, output_dim=32, batch_size=16):
 
     # get numpy results
     y0_np = (x_np @ a_np.T) + b_np[None,:]
-    np.allclose(y_np, y0_np)
+    match = np.allclose(y_np, y0_np, atol=1e-6)
 
-    # return model
-    return model
+    # return result
+    return match

@@ -2,5 +2,8 @@
 
 import gadget
 
-model = gadget.model.test_model()
-print(model)
+match = gadget.model.test_model()
+print(match)
+
+match = gadget.model.test_getrows()
+print(match)

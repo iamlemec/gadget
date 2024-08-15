@@ -3,7 +3,7 @@
 import numpy as np
 from typing import get_type_hints
 
-from .ggml import GGMLQuantizationType, ggml_mul_mat, ggml_add
+from .ggml import GGMLQuantizationType
 from .loader import GgufFile
 from .compute import GgmlCompute, set_tensor_name
 
@@ -90,6 +90,8 @@ class GgmlModel(GgmlCompute):
 ##
 
 def test_model(input_dim=64, output_dim=32, batch_size=16):
+    from .ggml import ggml_mul_mat, ggml_add
+
     # simple model interface
     class TestModel(GgmlModel):
         # strings dimensions are filled in dynamically
@@ -130,7 +132,51 @@ def test_model(input_dim=64, output_dim=32, batch_size=16):
 
     # get numpy results
     y0_np = (x_np @ a_np.T) + b_np[None,:]
-    np.allclose(y_np, y0_np)
+    match = np.allclose(y_np, y0_np, atol=1e-6)
 
-    # return model
-    return model
+    # return result
+    return match
+
+def test_getrows(output_dim=32, vocab_size=1024, batch_size=16):
+    from .ggml import ggml_get_rows
+
+    # simple model interface
+    class TestModel(GgmlModel):
+        # strings dimensions are filled in dynamically
+        x: Tensor('I32', ('batch_size',))
+
+        def forward(self):
+            # get contexts and inputs
+            ctx, x, m = (
+                self.ctx_graph, self.tensors['x'],  self.tensors['m']
+            )
+
+            # apply function
+            x1 = ggml_get_rows(ctx, m, x, name=f'x1')
+
+            # return result
+            return x1
+
+    # generate weights
+    m_np = np.random.randn(vocab_size, output_dim).astype(np.float32)
+
+    # create dummy gguf
+    gguf = GgufFile()
+    gguf.set_field('name', b'test')
+    gguf.set_field('vocab_size', vocab_size, dtype=np.int64)
+    gguf.set_field('output_dim', output_dim, dtype=np.int64)
+    gguf.set_tensor('m', m_np)
+
+    # load gguf as model
+    model = TestModel.from_gguf(gguf, batch_size=batch_size)
+
+    # compute on input data
+    x_np = np.random.randint(0, vocab_size, size=(batch_size,), dtype=np.int32)
+    y_np = model(x=x_np)
+
+    # get numpy results
+    y0_np = m_np.take(x_np, axis=0)
+    match = np.allclose(y_np, y0_np, atol=1e-6)
+
+    # return result
+    return match
