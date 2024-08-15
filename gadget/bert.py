@@ -7,6 +7,10 @@ from .ggml import (
     ggml_get_rows,
     ggml_add,
     ggml_add_inplace,
+    ggml_mul,
+    ggml_mul_inplace,
+    ggml_norm,
+    ggml_mul_mat,
     ggml_view_1d,
 )
 from .loader import GgufFile
@@ -27,11 +31,14 @@ class BertModel(GgmlModel):
 
         # get hparams
         embed_dim = self.params['bert.embedding_length']
+        layer_norm_eps = self.params['bert.attention.layer_norm_epsilon']
 
         # get weights
         token_embd = self.tensors['token_embd.weight']
         token_types = self.tensors['token_types.weight']
         position_embd = self.tensors['position_embd.weight']
+        toknorm_weight = self.tensors['token_embd_norm.weight']
+        toknorm_bias = self.tensors['token_embd_norm.bias']
 
         # get inputs
         tokens = self.tensors['tokens']
@@ -39,18 +46,24 @@ class BertModel(GgmlModel):
 
         # get token embeddings
         embed = ggml_get_rows(
-            ctx, token_embd, tokens, name='embed'
+            ctx, token_embd, tokens, name='embed=tok'
         )
 
-        # get token type embeddings
-        embed = ggml_add_inplace(ctx, embed, ggml_view_1d(
+        # get token type embeddings (row 0)
+        embed = ggml_add(ctx, embed, ggml_view_1d(
             ctx, token_types, embed_dim, 0, name='typ_embed'
-        ))
+        ), name='embed=tok+typ')
 
         # get positional embeddings
-        embed = ggml_add_inplace(ctx, embed, ggml_get_rows(
+        embed = ggml_add(ctx, embed, ggml_get_rows(
             ctx, position_embd, positions, name='pos_embed'
-        ))
+        ), name='embed=tok+typ+pos')
+
+        # do layer norm
+        embed = ggml_add(ctx,
+            ggml_mul(ctx, ggml_norm(ctx, embed, layer_norm_eps), toknorm_weight),
+            toknorm_bias, name='embed_norm'
+        )
 
         # return embedding
         return embed
