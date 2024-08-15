@@ -2,6 +2,7 @@
 
 import os
 import ctypes
+from math import prod
 
 from .general import load_shared_lib, ctypes_function
 from .constants import GGMLQuantizationType
@@ -24,8 +25,16 @@ def get_tensor_nelem(tensor):
     value = tensor.contents
     return tuple(value.ne[:4])
 
+def get_arg_info(a):
+    if type(a) is ggml_tensor_p:
+        ty = get_tensor_type(a)
+        ne = get_tensor_nelem(a)
+        return f'ggml_tensor: {ty.name} × {ne}'
+    else:
+        return f'{type(a).__name__}: {a}'
+
 def get_input_info(*args):
-    return ' '.join([str(get_tensor_nelem(tensor)) for tensor in args])
+    return '\n'.join([str(get_arg_info(a)) for a in args])
 
 def named_output(func):
     def wrapper(*args, name=None):
@@ -40,7 +49,7 @@ def check_inputs(check):
         def inner(ctx, *args):
             if not check(*args):
                 raise ValueError(
-                    f'{func.__name__}: bad tensor sizes {get_input_info(*args)}'
+                    f'{func.__name__}: invalid arguments\n{get_input_info(*args)}'
                 )
             return func(ctx, *args)
         return inner
@@ -79,6 +88,10 @@ def ggml_can_get_rows(t0, t1):
         (ne1[3] == 1     ) and
         (ttype1 == GGMLQuantizationType.I32)
     )
+
+def ggml_can_reshape_3d(t, ne0, ne1, ne2):
+    ne = get_tensor_nelem(t)
+    return prod(ne) == ne0 * ne1 * ne2
 
 ##
 ## constants
@@ -1003,6 +1016,8 @@ def ggml_reshape_1d(ctx, a, ne0): ...
 )
 def ggml_reshape_2d(ctx, a, ne0, ne1): ...
 
+@named_output
+@check_inputs(ggml_can_reshape_3d)
 @ctypes_function(_ggml,
     [ggml_context_p, ggml_tensor_p, ctypes.c_int64, ctypes.c_int64, ctypes.c_int64],
     ggml_tensor_p

@@ -40,16 +40,11 @@ def freeze(func):
     return wrapper
 
 class GgmlModel(GgmlCompute):
-    def __init__(self, params, weights, inputs, backend=None):
-        super().__init__(
-            params, weights | inputs, freeze(self.forward), backend=backend
-        )
+    def __init__(self, params, tensors, backend=None):
+        super().__init__(params, tensors, freeze(self.forward), backend=backend)
 
     @classmethod
-    def from_gguf(cls, gguf, backend=None, **kwargs):
-        # get hparams (shallow copy)
-        params = gguf.fields | kwargs
-
+    def from_gguf(cls, gguf, backend=None, **params):
         # get metadata from gguf
         weights = {
             key: (ttype, tensor.shape)
@@ -63,12 +58,12 @@ class GgmlModel(GgmlCompute):
 
         # resolve string fields
         inputs = {
-            k: (t, [resolve_field(x, params) for x in s])
+            k: (t, [resolve_field(x, params, gguf.fields) for x in s])
             for k, (t, s) in hints.items()
         }
 
         # create model and graph
-        self = cls(params, weights, inputs, backend=backend)
+        self = cls(gguf.fields | params, weights | inputs, backend=backend)
 
         # assign tensors on backend
         for name, (ttype, tensor) in gguf.tensors.items():
@@ -89,7 +84,7 @@ class GgmlModel(GgmlCompute):
 ## testing
 ##
 
-def test_model(input_dim=64, output_dim=32, batch_size=16):
+def test_linear(input_dim=64, output_dim=32, batch_size=16):
     from .ggml import ggml_mul_mat, ggml_add
 
     # simple model interface

@@ -5,7 +5,8 @@ import gadget.bert as bert
 
 # configure
 gguf_path = '/home/doug/fast/embed/bge-micro-v2-f32.gguf'
-model, embed = bert.test_bert(gguf_path)
+hf_model = 'TaylorAI/bge-micro-v2'
 
-# print results
-print(embed)
+# run test
+results = bert.test_bert(gguf_path, hf_model, batch_size=512)
+

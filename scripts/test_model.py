@@ -2,7 +2,7 @@
 
 import gadget
 
-match = gadget.model.test_model()
+match = gadget.model.test_linear()
 print(match)
 
 match = gadget.model.test_getrows()

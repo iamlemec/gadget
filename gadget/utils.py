@@ -1,6 +1,7 @@
 # utils
 
-from collections import defaultdict
+import re
+from collections import defaultdict, UserDict
 
 # get batch indices
 def batch_indices(length, batch_size):
@@ -11,15 +12,49 @@ def list_splitter(text, maxlen):
     for i, j in batch_indices(len(text), maxlen):
         yield text[i:j]
 
-# dictionary that allows getattr access
-class AttrDict(dict):
-    def __getattr__(self, key):
-        if type(key) is list:
-            return [self[k] for k in key]
-        return self[key]
+def glob_strings(pattern, strings):
+    # make regex pattern
+    reg = '^' + pattern.replace('.', '\\.').replace('*', '.*') + '$'
 
-    def __setattr__(self, key, value):
-        self[key] = value
+    # get matching objects
+    matches = [re.match(reg, s) for s in strings]
+
+    # return matching strings
+    return [m.string for m in matches if m is not None]
+
+# dictionary that allows getattr access
+# only allows string keys for correctness
+class AttrDict(UserDict):
+    def __setitem__(self, key, val):
+        # key type validation
+        if type(key) is not str:
+            raise ValueError('Only string keys allowed')
+        elif '*' in key:
+            raise ValueError('Wildcards (*) not allowed in keys')
+
+        # get the key
+        super().__setitem__(key, val)
+
+    def __getitem__(self, key):
+        # handle tuple accessor case (prevent recursion)
+        if type(key) is tuple:
+            return [super().__getitem__(k) for k in key]
+
+        # key type validation
+        if type(key) is not str:
+            raise ValueError('Only string keys allowed')
+
+        # get the key
+        return super().__getitem__(key)
+
+    # allows globbing with *
+    def subset(self, keys):
+        # expand wildcards to lists
+        if type(keys) is str:
+            keys = glob_strings(keys, self)
+
+        # get subset dict
+        return {k: self[k] for k in keys}
 
 # = defaultdict(list)
 # + handles popping off maximal list

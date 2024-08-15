@@ -174,7 +174,7 @@ class GgmlCompute:
             ggml_backend_free(self.backend)
 
     def create_params(self, params):
-        self.params = params
+        self.params = AttrDict(params)
 
     def create_backend(self, name):
         if name is None or name == 'cpu':
