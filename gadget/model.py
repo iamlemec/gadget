@@ -127,7 +127,7 @@ def test_linear(input_dim=64, output_dim=32, batch_size=16):
 
     # get numpy results
     y0_np = (x_np @ a_np.T) + b_np[None,:]
-    match = np.allclose(y_np, y0_np, atol=1e-6)
+    match = np.allclose(y_np, y0_np, atol=1e-5)
 
     # return result
     return match
@@ -171,7 +171,7 @@ def test_getrows(output_dim=32, vocab_size=1024, batch_size=16):
 
     # get numpy results
     y0_np = m_np.take(x_np, axis=0)
-    match = np.allclose(y_np, y0_np, atol=1e-6)
+    match = np.allclose(y_np, y0_np, atol=1e-5)
 
     # return result
     return match

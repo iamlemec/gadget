@@ -1,10 +1,12 @@
 # gadget
 
+from . import ggml
 from . import loader
 from . import compute
 from . import model
 from . import bert
 
+from .ggml import GGMLQuantizationType
 from .loader import GgufFile
 from .compute import GgmlCompute
 from .model import GgmlModel

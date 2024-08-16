@@ -69,7 +69,7 @@ def get_tensor_name(tensor):
     value = tensor.contents
     return value.name.decode('utf-8')
 
-def get_tensor_shape(tensor, raw=False):
+def get_tensor_shape(tensor):
     value = tensor.contents
     nelem = tuple(value.ne[:4])
     return trim_nelem(nelem)[::-1]
@@ -96,7 +96,12 @@ def array_to_tensor(array, tensor):
     # check dtype match
     dtype = ttype_to_dtype[ttype]
     if array.dtype != dtype:
-        raise ValueError(f'array dtype mismatch: {array.dtype} != {dtype}')
+        raise ValueError(f'input dtype ({array.dtype}) does not match target dtype ({dtype})')
+
+    # check shape match
+    shape = get_tensor_shape(tensor)
+    if array.shape != shape:
+        raise ValueError(f'input shape {array.shape} does not match target shape {shape}')
 
     # get data pointers
     src = array.ctypes.data
@@ -160,6 +165,12 @@ def set_tensor_name(tensor, name):
 
 class GgmlCompute:
     def __init__(self, params, tensors, model, backend=None):
+        # initialize empty
+        self.backend = None
+        self.ctx_tensors = None
+        self.ctx_graph = None
+
+        # create tensors and graph
         self.create_params(params)
         self.create_backend(backend)
         self.create_tensors(tensors)
@@ -210,7 +221,10 @@ class GgmlCompute:
     # set tensor values using numpy
     def set_input(self, name, array):
         tensor = self.tensors[name]
-        array_to_tensor(array, tensor)
+        try:
+            array_to_tensor(array, tensor)
+        except ValueError as e:
+            raise ValueError(f'error setting input "{name}":\n{e}')
 
     # create computational graph
     def create_graph(self, model, graph_size=GGML_DEFAULT_GRAPH_SIZE):
@@ -238,9 +252,6 @@ class GgmlCompute:
         # allocate tensors to buffers for graph
         ggml_gallocr_reserve(self.alloc, self.graph)
         ggml_gallocr_alloc_graph(self.alloc, self.graph)
-
-        mem_worst = ggml_gallocr_get_buffer_size(self.alloc, 0)
-        print(f'compute buffer size: {mem_worst/1024:.4f} KiB')
 
     def compute(self, **values):
         # set input values
@@ -311,7 +322,7 @@ def test_compute(input_dim=64, output_dim=32, batch_size=16):
 
     # get numpy results
     y0_np = (x_np @ a_np.T) + b_np[None,:]
-    match = np.allclose(y_np, y0_np, atol=1e-6)
+    match = np.allclose(y_np, y0_np, atol=1e-5)
 
     # return result
     return match

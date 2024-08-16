@@ -17,24 +17,6 @@ from .layers import (
 from .model import GgmlModel, Tensor
 
 ##
-## utils
-##
-
-# only need causal for now
-def attention_matrix(seq_ids, null_id=-1):
-    mask = seq_ids[:, None] == seq_ids[None, :]
-    logits = np.where(mask, 0.0, -np.inf)
-    return logits
-
-def normalize(values, axis=-1):
-    return values / np.linalg.norm(values, axis=axis, keepdims=True)
-
-def padded_array(dtype, length, values, fill):
-    arr = np.full((length,), fill, dtype=dtype)
-    arr[:len(values)] = values
-    return arr
-
-##
 ## bert model
 ##
 
@@ -109,57 +91,3 @@ class BertModel(GgmlModel):
 
         # return embedding
         return cur
-
-    def encode(self, tokens, positions=None, sequences=None):
-        # get runtime parameters
-        batch_size = self.params['batch_size']
-
-        # validate input tokens
-        tokens = np.asarray(tokens, dtype=np.int32)
-        if tokens.shape != (batch_size,):
-            raise ValueError('tokens must be an array of shape (batch_size,)')
-
-        # handle single sequence case
-        if sequences is None:
-            sequences = np.zeros_like(tokens, dtype=np.int32)
-
-        # generate token positions
-        if positions is None:
-            positions = np.arange(batch_size, dtype=np.int32)
-
-        # set up attention matrix
-        attention = attention_matrix(sequences).astype(np.float32)
-
-        # compute on input data
-        embed = self(tokens=tokens, positions=positions, attention=attention)
-
-        # return embedding
-        return embed
-
-def test_bert(gguf_path, model_id, prompt='hello world', batch_size=512):
-    import torch
-    from transformers import AutoTokenizer, AutoModel
-
-    # load tokenizer
-    toker = AutoTokenizer.from_pretrained(model_id)
-    tokens = toker(prompt)['input_ids']
-    n_tokens = len(tokens)
-    seqids = n_tokens * [0]
-
-    # load hf model
-    hf_model = AutoModel.from_pretrained(model_id)
-    hf_tokens = torch.tensor(tokens, dtype=torch.int64).unsqueeze(0)
-    hf_embed = normalize(hf_model(hf_tokens).last_hidden_state.squeeze(0).detach().numpy())
-
-    # load gguf model
-    gg_model = BertModel.from_path(gguf_path, batch_size=batch_size)
-    gg_tokens = padded_array(np.int32, batch_size, tokens, 0)
-    gg_seqids = padded_array(np.int32, batch_size, seqids, -1)
-    gg_embed = normalize(gg_model.encode(gg_tokens, sequences=gg_seqids)[:n_tokens,:])
-
-    # check results
-    match = np.allclose(hf_embed, gg_embed, atol=1e-3)
-    print(match)
-
-    return hf_embed, gg_embed
-
