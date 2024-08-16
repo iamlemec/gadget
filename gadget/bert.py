@@ -23,10 +23,13 @@ from .model import GgmlModel, Tensor
 ##
 
 # only need causal for now
-def attention_matrix(sequences):
-    mask = sequences[:, None] == sequences[None, :]
+def attention_matrix(seq_ids, null_id=-1):
+    mask = seq_ids[:, None] == seq_ids[None, :]
     logits = np.where(mask, 0.0, -np.inf)
     return logits
+
+def normalize(values, axis=-1):
+    return values / np.linalg.norm(values, axis=axis, keepdims=True)
 
 class BertModel(GgmlModel):
     tokens   : Tensor('I32', ('batch_size',))
@@ -69,7 +72,7 @@ class BertModel(GgmlModel):
         # loop over layers
         for i in range(n_layers):
             # get layer tensors
-            wq, bq, wk, bk, wv, bv, wao, bao, wan, ban, wu, bu, wd, bd, wln, bln = self.tensors[
+            wq, bq, wk, bk, wv, bv, wo, bo, wan, ban, wu, bu, wd, bd, wln, bln = self.tensors[
                 f'blk.{i}.attn_q.weight'           , f'blk.{i}.attn_q.bias'           ,
                 f'blk.{i}.attn_k.weight'           , f'blk.{i}.attn_k.bias'           ,
                 f'blk.{i}.attn_v.weight'           , f'blk.{i}.attn_v.bias'           ,
@@ -81,18 +84,21 @@ class BertModel(GgmlModel):
             ]
 
             # get attention interactions
-            lay = attention_layer(ctx, cur, n_heads, mask, wq, bq, wk, bk, wv, bv, name=f'attn{i}')
+            att = attention_layer(
+                ctx, cur, n_heads, mask, wq, bq, wk, bk, wv, bv, wo, bo,
+                eps=layer_norm_eps, name=f'attn{i}'
+            )
 
-            # apply attention output and normalize
-            lay = linear_layer(ctx, lay, wao, bao, name=f'attn{i}_out')
-            lay = norm_layer(ctx, lay, wan, ban, layer_norm_eps, name=f'attn{i}_norm')
+            # add attention output to current then normalize
+            att = ggml_add(ctx, cur, att)
+            att = norm_layer(ctx, att, wan, ban, layer_norm_eps, name=f'attn{i}_norm')
 
-            # feed forward network
-            lay = linear_layer(ctx, lay, wu, bu, name=f'ffn{i}_up')
-            lay = linear_layer(ctx, lay, wd, bd, name=f'ffn{i}_down')
+            # feed forward network on current
+            cur = linear_layer(ctx, att, wu, bu, name=f'ffn{i}_up')
+            cur = linear_layer(ctx, cur, wd, bd, name=f'ffn{i}_down')
 
-            # add to current tensor and normalize
-            cur = ggml_add(ctx, cur, lay, name=f'add{i}')
+            # add attention output to current tensor and normalize
+            cur = ggml_add(ctx, cur, att, name=f'add{i}')
             cur = norm_layer(ctx, cur, wln, bln, layer_norm_eps, name=f'norm{i}')
 
         # return embedding
@@ -124,19 +130,31 @@ class BertModel(GgmlModel):
         # return embedding
         return embed
 
-def test_bert(gguf_path, model_id, batch_size=512):
+def padded_array(dtype, length, values, fill):
+    arr = np.full((length,), fill, dtype=dtype)
+    arr[:len(values)] = values
+    return arr
+
+def test_bert(gguf_path, model_id, prompt='hello world', batch_size=512):
     import torch
-    from transformers import AutoModel
+    from transformers import AutoTokenizer, AutoModel
+
+    # load tokenizer
+    toker = AutoTokenizer.from_pretrained(model_id)
+    tokens = toker(prompt)['input_ids']
+    n_tokens = len(tokens)
+    seqids = n_tokens * [0]
 
     # load hf model
     hf_model = AutoModel.from_pretrained(model_id)
-    hf_tokens = torch.arange(batch_size, dtype=torch.int64).unsqueeze(0)
-    hf_embed = hf_model.embeddings(hf_tokens).squeeze(0).detach().numpy()
+    hf_tokens = torch.tensor(tokens, dtype=torch.int64).unsqueeze(0)
+    hf_embed = normalize(hf_model(hf_tokens).last_hidden_state.squeeze(0).detach().numpy())
 
     # load gguf model
     gg_model = BertModel.from_path(gguf_path, batch_size=batch_size)
-    gg_tokens = np.arange(batch_size, dtype=np.int32)
-    gg_embed = gg_model.encode(gg_tokens)
+    gg_tokens = padded_array(np.int32, batch_size, tokens, 0)
+    gg_seqids = padded_array(np.int32, batch_size, seqids, -1)
+    gg_embed = normalize(gg_model.encode(gg_tokens, sequences=gg_seqids)[:n_tokens,:])
 
     # check results
     match = np.allclose(hf_embed, gg_embed, atol=1e-6)

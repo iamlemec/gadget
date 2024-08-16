@@ -40,7 +40,7 @@ def norm_layer(ctx, x, weight, bias, eps=0.0, rms=False, inplace=False, name=Non
     x = add_func(ctx, x, bias, name=f'{name}_add')
     return x
 
-def attention_layer(ctx, x, n_heads, mask, wq, bq, wk, bk, wv, bv, eps=0.0, name=None):
+def attention_layer(ctx, x, n_heads, mask, wq, bq, wk, bk, wv, bv, wo, bo, eps=0.0, alibi=0.0, name=None):
     # get dimensions
     batch_size, embed_dim= get_tensor_shape(x)
     if embed_dim % n_heads != 0:
@@ -48,7 +48,7 @@ def attention_layer(ctx, x, n_heads, mask, wq, bq, wk, bk, wv, bv, eps=0.0, name
 
     # get attention head_dim
     head_dim = embed_dim // n_heads
-    head_wgt = 1.0/sqrt(n_heads)
+    head_wgt = 1.0/sqrt(head_dim)
 
     # compute query, key, value
     q = linear_layer(ctx, x, wq, bq, name=f'{name}_q')
@@ -65,7 +65,7 @@ def attention_layer(ctx, x, n_heads, mask, wq, bq, wk, bk, wv, bv, eps=0.0, name
 
     # compute interactions
     kq = ggml_mul_mat(ctx, k, q)
-    kq = ggml_soft_max_ext(ctx, kq, mask, head_wgt, 0.0)
+    kq = ggml_soft_max_ext(ctx, kq, mask, head_wgt, alibi)
 
     # pull in values
     v = ggml_cont(ctx, ggml_transpose(ctx, ggml_reshape_2d(ctx, v, embed_dim, batch_size)))
@@ -75,5 +75,9 @@ def attention_layer(ctx, x, n_heads, mask, wq, bq, wk, bk, wv, bv, eps=0.0, name
     kqv = ggml_permute(ctx, kqv, 0, 2, 1, 3)
     kqv = ggml_cont_2d(ctx, kqv, embed_dim, batch_size)
 
+    # apply output layer
+    out = linear_layer(ctx, kqv, wo, bo, name=f'{name}_out')
+
     # return output
-    return kqv
+    return out
+
