@@ -11,6 +11,7 @@ from .ggml import (
     ggml_mul_inplace,
     ggml_add,
     ggml_add_inplace,
+    ggml_gelu,
     ggml_mul_mat,
     ggml_permute,
     ggml_transpose,
@@ -25,7 +26,7 @@ from .compute import get_tensor_shape
 def linear_layer(ctx, x, weight, bias=None, name=None):
     x = ggml_mul_mat(ctx, weight, x, name=f'{name}_mul')
     if bias is not None:
-        x = ggml_add(ctx, x, bias, name=f'{name}_add')
+        x = ggml_add_inplace(ctx, x, bias, name=f'{name}_add')
     return x
 
 def norm_layer(ctx, x, weight, bias, eps=0.0, rms=False, inplace=False, name=None):
@@ -80,4 +81,14 @@ def attention_layer(ctx, x, n_heads, mask, wq, bq, wk, bk, wv, bv, wo, bo, eps=0
 
     # return output
     return out
+
+activations = {
+    'gelu': ggml_gelu,
+}
+
+def feed_forward_layer(ctx, x, wu, bu, wd, bd, act='gelu', name=None):
+    x = linear_layer(ctx, x, wu, bu, name=f'{name}_up')
+    x = activations[act](ctx, x)
+    x = linear_layer(ctx, x, wd, bd, name=f'{name}_down')
+    return x
 

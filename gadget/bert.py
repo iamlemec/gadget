@@ -3,24 +3,21 @@
 import numpy as np
 
 from .ggml import (
-    GGMLQuantizationType,
-    ggml_get_rows,
     ggml_add,
     ggml_add_inplace,
-    ggml_mul,
-    ggml_mul_inplace,
-    ggml_norm,
-    ggml_gelu,
-    ggml_mul_mat,
+    ggml_get_rows,
     ggml_view_1d,
 )
-from .layers import linear_layer, norm_layer, attention_layer
-from .loader import GgufFile
-from .compute import set_tensor_name
+from .layers import (
+    linear_layer,
+    norm_layer,
+    attention_layer,
+    feed_forward_layer,
+)
 from .model import GgmlModel, Tensor
 
 ##
-## bert model
+## utils
 ##
 
 # only need causal for now
@@ -31,6 +28,15 @@ def attention_matrix(seq_ids, null_id=-1):
 
 def normalize(values, axis=-1):
     return values / np.linalg.norm(values, axis=axis, keepdims=True)
+
+def padded_array(dtype, length, values, fill):
+    arr = np.full((length,), fill, dtype=dtype)
+    arr[:len(values)] = values
+    return arr
+
+##
+## bert model
+##
 
 class BertModel(GgmlModel):
     tokens   : Tensor('I32', ('batch_size',))
@@ -66,9 +72,9 @@ class BertModel(GgmlModel):
 
         # get token embeddings (token+type+position+norm)
         cur = ggml_get_rows(ctx, etok, tokens, name='embed=tok')
-        cur = ggml_add(ctx, cur, ggml_view_1d(ctx, etyp, embed_dim, 0), name='embed=tok+typ')
-        cur = ggml_add(ctx, cur, ggml_get_rows(ctx, epos, positions), name='embed=tok+typ+pos')
-        cur = norm_layer(ctx, cur, tnw, tnb, layer_norm_eps, name='embed_norm')
+        cur = ggml_add_inplace(ctx, cur, ggml_view_1d(ctx, etyp, embed_dim, 0), name='embed=tok+typ')
+        cur = ggml_add_inplace(ctx, cur, ggml_get_rows(ctx, epos, positions), name='embed=tok+typ+pos')
+        cur = norm_layer(ctx, cur, tnw, tnb, layer_norm_eps, inplace=True, name='embed_norm')
 
         # loop over layers
         for i in range(n_layers):
@@ -91,17 +97,15 @@ class BertModel(GgmlModel):
             )
 
             # add attention output to current then normalize
-            att = ggml_add(ctx, cur, att)
-            att = norm_layer(ctx, att, wan, ban, layer_norm_eps, name=f'attn{i}_norm')
+            att = ggml_add_inplace(ctx, cur, att)
+            att = norm_layer(ctx, att, wan, ban, layer_norm_eps, inplace=True, name=f'attn{i}_norm')
 
             # feed forward network on current
-            cur = linear_layer(ctx, att, wu, bu, name=f'ffn{i}_up')
-            cur = ggml_gelu(ctx, cur)
-            cur = linear_layer(ctx, cur, wd, bd, name=f'ffn{i}_down')
+            cur = feed_forward_layer(ctx, att, wu, bu, wd, bd, act='gelu', name=f'ffn{i}')
 
             # add attention output to current tensor and normalize
-            cur = ggml_add(ctx, cur, att, name=f'add{i}')
-            cur = norm_layer(ctx, cur, wln, bln, layer_norm_eps, name=f'norm{i}')
+            cur = ggml_add_inplace(ctx, cur, att, name=f'add{i}')
+            cur = norm_layer(ctx, cur, wln, bln, layer_norm_eps, inplace=True, name=f'norm{i}')
 
         # return embedding
         return cur
@@ -131,11 +135,6 @@ class BertModel(GgmlModel):
 
         # return embedding
         return embed
-
-def padded_array(dtype, length, values, fill):
-    arr = np.full((length,), fill, dtype=dtype)
-    arr[:len(values)] = values
-    return arr
 
 def test_bert(gguf_path, model_id, prompt='hello world', batch_size=512):
     import torch
