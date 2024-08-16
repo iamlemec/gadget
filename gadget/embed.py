@@ -53,10 +53,10 @@ def pool_embeds(embeds, pooling, seqids):
 ##
 
 class EmbedModel:
-    def __init__(self, gguf_path, model_id, batch_size=512, pooling=None, model_class=BertModel, **kwargs):
-        self.batch_size = batch_size
+    def __init__(self, gguf_path, model_id, pooling=None, model_class=BertModel, **kwargs):
         self.toker = AutoTokenizer.from_pretrained(model_id)
-        self.model = model_class.from_path(gguf_path, batch_size=batch_size)
+        self.model = model_class.from_path(gguf_path, **kwargs)
+        self.batch_size = self.model.params['batch_size']
 
         # assign pooling type
         if pooling is None:
@@ -114,7 +114,7 @@ class EmbedModel:
 ## test
 ##
 
-def test_bert(gguf_path, model_id, prompt='hello world', batch_size=512):
+def test_embed(gguf_path, model_id, prompt='hello world', model_class=BertModel, **kwargs):
     import torch
     from transformers import AutoModel
 
@@ -123,14 +123,13 @@ def test_bert(gguf_path, model_id, prompt='hello world', batch_size=512):
     hf_model = AutoModel.from_pretrained(model_id)
 
     # load gg model
-    gg_model = EmbedModel(gguf_path, model_id, batch_size)
-    pooling = gg_model.pooling
+    gg_model = EmbedModel(gguf_path, model_id, model_class=model_class, **kwargs)
 
     # embed with hf
     hf_input = hf_toker(prompt, return_tensors='pt')['input_ids']
     hf_seqid = torch.zeros_like(hf_input).numpy()
     hf_state = hf_model(hf_input).last_hidden_state[0].detach().numpy()
-    hf_poold = pool_embeds(hf_state, pooling, hf_seqid)
+    hf_poold = pool_embeds(hf_state, gg_model.pooling, hf_seqid)
     hf_embed = l2_normalize(hf_poold)
 
     # embed with ggml

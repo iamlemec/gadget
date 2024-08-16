@@ -14,24 +14,23 @@ from .layers import (
     attention_layer,
     feed_forward_layer,
 )
-from .model import GgmlModel, Tensor
+from .model import GgmlModel, Parameter, Tensor
 
 ##
 ## bert model
 ##
 
 class BertModel(GgmlModel):
-    tokens   : Tensor('I32', ('batch_size',))
-    positions: Tensor('I32', ('batch_size',))
-    attention: Tensor('F32', ('batch_size', 'batch_size'))
+    batch_size: Parameter('bert.context_length')
+    tokens    : Tensor('I32', ('batch_size',))
+    positions : Tensor('I32', ('batch_size',))
+    attention : Tensor('F32', ('batch_size', 'batch_size'))
 
+    # perform param validation here
     def __init__(self, params, tensors, backend=None):
         # validate batch_size
-        if 'batch_size' in params:
-            if (bs := params['batch_size']) > (cl := params['bert.context_length']):
-                raise ValueError('batch_size ({bs}) > context_length ({cl})')
-        else:
-            params['batch_size'] = params['bert.context_length']
+        if (bs := params['batch_size']) > (cl := params['bert.context_length']):
+            raise ValueError('batch_size ({bs}) > context_length ({cl})')
 
         # pass to model constructor
         super().__init__(params, tensors, backend=backend)

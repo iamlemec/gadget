@@ -11,15 +11,16 @@ from .compute import GgmlCompute, set_tensor_name
 ## type decorators
 ##
 
+class Parameter:
+    def __init__(self, field):
+        self.field = field
+
 class Tensor:
     def __init__(self, ttype, shape):
         if type(ttype) is str:
             ttype = GGMLQuantizationType[ttype]
         self.ttype = ttype
         self.shape = shape
-
-    def to_tuple(self):
-        return self.ttype, self.shape
 
 def resolve_field(key, *dicts):
     if type(key) is str:
@@ -52,18 +53,22 @@ class GgmlModel(GgmlCompute):
         }
 
         # get type hints for model
-        hints = {
-            k: v.to_tuple() for k, v in get_type_hints(cls).items()
+        hints = get_type_hints(cls)
+
+        # sub in default parameters
+        params0 = {
+            k: gguf.get_field(v.field)
+            for k, v in hints.items() if type(v) is Parameter
         }
 
         # resolve string fields
         inputs = {
-            k: (t, [resolve_field(x, params, gguf.fields) for x in s])
-            for k, (t, s) in hints.items()
+            k: (t.ttype, [resolve_field(x, params, params0, gguf.fields) for x in t.shape])
+            for k, t in hints.items() if type(t) is Tensor
         }
 
         # create model and graph
-        self = cls(gguf.fields | params, weights | inputs, backend=backend)
+        self = cls(gguf.fields | params0 | params, weights | inputs, backend=backend)
 
         # assign tensors on backend
         for name, (ttype, tensor) in gguf.tensors.items():
