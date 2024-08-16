@@ -10,6 +10,7 @@ from .ggml import (
     ggml_mul,
     ggml_mul_inplace,
     ggml_norm,
+    ggml_gelu,
     ggml_mul_mat,
     ggml_view_1d,
 )
@@ -95,6 +96,7 @@ class BertModel(GgmlModel):
 
             # feed forward network on current
             cur = linear_layer(ctx, att, wu, bu, name=f'ffn{i}_up')
+            cur = ggml_gelu(ctx, cur)
             cur = linear_layer(ctx, cur, wd, bd, name=f'ffn{i}_down')
 
             # add attention output to current tensor and normalize
