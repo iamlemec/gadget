@@ -4,8 +4,9 @@ import numpy as np
 from typing import get_type_hints
 
 from .ggml import GGMLQuantizationType
+from .tensor import set_tensor_name
 from .loader import GgufFile
-from .compute import GgmlCompute, set_tensor_name
+from .compute import GgmlCompute
 
 ##
 ## type decorators
@@ -48,8 +49,8 @@ class GgmlModel(GgmlCompute):
     def from_gguf(cls, gguf, backend=None, **params):
         # get metadata from gguf
         weights = {
-            key: (ttype, tensor.shape)
-            for key, (ttype, tensor) in gguf.tensors.items()
+            key: (ttype, shape)
+            for key, (ttype, shape, array) in gguf.tensors.items()
         }
 
         # get type hints for model
@@ -71,7 +72,7 @@ class GgmlModel(GgmlCompute):
         self = cls(gguf.fields | params0 | params, weights | inputs, backend=backend)
 
         # assign tensors on backend
-        for name, (ttype, tensor) in gguf.tensors.items():
+        for name, (ttype, shape, tensor) in gguf.tensors.items():
             self.set_input(name, tensor)
 
         # return model

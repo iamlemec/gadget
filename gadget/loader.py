@@ -1,11 +1,12 @@
 # high leve gguf interface
 
 import numpy as np
+from math import prod
 from operator import itemgetter
 
 from .libs.constants import (
     GGUF_MAGIC, GGUF_VERSION, GGUF_DEFAULT_ALIGNMENT,
-    GGUFValueType, GGMLQuantizationType
+    GGUFValueType, GGMLQuantizationType, GGML_QUANT_SIZES
 )
 
 # map for scalar types (invertible)
@@ -35,6 +36,7 @@ ttype_to_type = {
     GGMLQuantizationType.I16    : np.int16  ,
     GGMLQuantizationType.I32    : np.int32  ,
     GGMLQuantizationType.I64    : np.int64  ,
+    GGMLQuantizationType.Q4_0   : np.uint8  ,
     GGMLQuantizationType.Q4_1   : np.uint8  ,
     GGMLQuantizationType.Q5_0   : np.uint8  ,
     GGMLQuantizationType.Q5_1   : np.uint8  ,
@@ -163,13 +165,24 @@ class GgufFile:
         # NOTE: we reverse the shape to match numpy array convention
         metadata = {}
         for _ in range(n_tensors):
+            # read in metadata fields
             name = self.read_unicode()
             dims = self.read_uint32()
             gshape = self.read(np.uint64, dims).astype(np.int64)
-            shape = tuple(map(int, gshape.tolist()[::-1]))
             ttype = GGMLQuantizationType(self.read_uint32())
             offset = self.read_uint64()
-            metadata[name] = shape, ttype, offset
+
+            # get array shape and size in numpy form
+            shape = tuple(map(int, gshape.tolist()[::-1]))
+            size = prod(shape)
+
+            # adjust shape and size for quant type block_size
+            block_size, type_size = GGML_QUANT_SIZES[ttype]
+            size1 = prod(shape) // block_size
+            shape1 = tuple(s // block_size if i == dims - 1 else s for i, s in enumerate(shape))
+
+            # save metadata for later
+            metadata[name] = ttype, shape, shape1, offset, size1
 
         # jump to alignment
         tensor_base = self.offset
@@ -179,12 +192,11 @@ class GgufFile:
 
         # read weights
         self.tensors = {}
-        for name, (shape, ttype, offset) in metadata.items():
+        for name, (ttype, shape, shape1, offset, size) in metadata.items():
             self.offset = tensor_base + offset
             dtype = ttype_to_type[ttype]
-            count = np.prod(shape)
-            vals = self.read(dtype, count=count)
-            self.tensors[name] = ttype, vals.reshape(shape)
+            vals = self.read(dtype, count=size)
+            self.tensors[name] = ttype, shape, vals.reshape(shape1)
 
         # return model
         return self
@@ -247,7 +259,7 @@ class GgufFile:
             writer.write_uint64(offset)
 
             # update offset
-            count = np.prod(shape)
+            count = prod(shape)
             width = ttype_to_dtype[ttype].itemsize
             offset += count * width
 
@@ -291,8 +303,8 @@ class GgufFile:
                 line = f'{key:{width}} = {value} ({typen})'
             lines.append(line)
         lines += ['', 'TENSORS']
-        for key, (ttype, tensor) in self.tensors.items():
-            lines.append(f'{key:{width}} = {ttype.name} × {tensor.shape[::-1]}')
+        for key, (ttype, shape, tensor) in self.tensors.items():
+            lines.append(f'{key:{width}} = {ttype.name} × {shape[::-1]}')
         return '\n'.join(lines)
 
     def base_size(self):

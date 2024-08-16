@@ -7,6 +7,7 @@ import numpy as np
 from .utils import AttrDict
 from .ggml import (
     GGMLQuantizationType,
+    GGML_QUANT_SIZES,
     ggml_tensor_overhead,
     ggml_graph_overhead,
     ggml_init_params,
@@ -32,58 +33,19 @@ from .ggml import (
     GGML_DEFAULT_GRAPH_SIZE,
 )
 from .libs.general import malloc, free
+from .tensor import (
+    ttype_to_ctype,
+    ttype_to_dtype,
+    get_tensor_shape,
+    get_tensor_type,
+    get_tensor_info,
+    get_quant_shape,
+    create_tensor,
+)
 
 ##
-## type conversion
+## tensor-array serialization
 ##
-
-ttype_to_ctype = {
-    GGMLQuantizationType.F32: ctypes.c_float,
-    # GGMLQuantizationType.F16: ctypes.c_half, # not supported by ctypes
-    GGMLQuantizationType.I8: ctypes.c_int8,
-    GGMLQuantizationType.I16: ctypes.c_int16,
-    GGMLQuantizationType.I32: ctypes.c_int32,
-    GGMLQuantizationType.I64: ctypes.c_int64,
-}
-
-ttype_to_dtype = {
-    GGMLQuantizationType.F32: np.float32,
-    # GGMLQuantizationType.F16: np.float16, # not supported by ctypes
-    GGMLQuantizationType.I8: np.int8,
-    GGMLQuantizationType.I16: np.int16,
-    GGMLQuantizationType.I32: np.int32,
-    GGMLQuantizationType.I64: np.int64,
-}
-
-##
-## tensor utilities
-##
-
-def trim_nelem(shape):
-    dims = 1 + max([
-        i for i, d in enumerate(shape) if d > 1
-    ], default=0)
-    return shape[:dims]
-
-def get_tensor_name(tensor):
-    value = tensor.contents
-    return value.name.decode('utf-8')
-
-def get_tensor_shape(tensor):
-    value = tensor.contents
-    nelem = tuple(value.ne[:4])
-    return trim_nelem(nelem)[::-1]
-
-def get_tensor_type(tensor):
-    value = tensor.contents
-    return GGMLQuantizationType(value.type)
-
-def get_tensor_info(tensor):
-    name = get_tensor_name(tensor)
-    ttype = get_tensor_type(tensor)
-    shape = get_tensor_shape(tensor)
-    stat = f'{name}: {ttype.name} × {shape}'
-    return stat
 
 # this assumes the data is contiguous
 # will implicity squeeze unit dimensions
@@ -99,7 +61,7 @@ def array_to_tensor(array, tensor):
         raise ValueError(f'input dtype ({array.dtype}) does not match target dtype ({dtype})')
 
     # check shape match
-    shape = get_tensor_shape(tensor)
+    shape = get_quant_shape(tensor)
     if array.shape != shape:
         raise ValueError(f'input shape {array.shape} does not match target shape {shape}')
 
@@ -134,30 +96,6 @@ def tensor_to_array(tensor):
 
     # return array
     return array
-
-##
-## tensor creation
-##
-
-# dispatch create functions
-create_funcs = {
-    1: ggml_new_tensor_1d,
-    2: ggml_new_tensor_2d,
-    3: ggml_new_tensor_3d,
-    4: ggml_new_tensor_4d,
-}
-
-# we reverse shape to match numpy convention
-def create_tensor(ctx, typ, shp, nam=None):
-    if (dims := len(shp)) not in create_funcs:
-        raise ValueError(f'unsupported shape: {shp}')
-    tensor = create_funcs[dims](ctx, typ, *shp[::-1])
-    if nam is not None:
-        ggml_set_name(tensor, nam.encode('utf-8'))
-    return tensor
-
-def set_tensor_name(tensor, name):
-    ggml_set_name(tensor, name.encode('utf-8'))
 
 ##
 ## compute interface

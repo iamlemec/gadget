@@ -2,6 +2,7 @@ from .libs import _libggml
 
 from .libs.constants import(
     GGMLQuantizationType,
+    GGML_QUANT_SIZES,
     LlamaPoolingType,
 )
 
