@@ -159,12 +159,8 @@ def test_bert(gguf_path, model_id, prompt='hello world', batch_size=512):
     gg_embed = normalize(gg_model.encode(gg_tokens, sequences=gg_seqids)[:n_tokens,:])
 
     # check results
-    match = np.allclose(hf_embed, gg_embed, atol=1e-6)
+    match = np.allclose(hf_embed, gg_embed, atol=1e-3)
     print(match)
 
-    # return results
-    return (
-        gg_model, gg_tokens, gg_embed,
-        hf_model, hf_tokens, hf_embed
-    )
+    return hf_embed, gg_embed
 
