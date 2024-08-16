@@ -11,4 +11,3 @@ from .model import GgmlModel
 from .bert import BertModel
 
 __version__ = "0.1"
-

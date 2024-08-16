@@ -5,7 +5,7 @@ build-backend = "scikit_build_core.build"
 [project]
 name = "gadget"
 dynamic = ["version"]
-description = "Embeddings library for llama.cpp"
+description = "Embeddings library for ggml"
 readme = "README.md"
 license = { text = "MIT" }
 authors = [
@@ -13,7 +13,6 @@ authors = [
 ]
 dependencies = [
     "numpy",
-    "torch",
 ]
 requires-python = ">=3.8"
 classifiers = [
@@ -30,7 +29,7 @@ wheel.packages = ["gadget"]
 cmake.verbose = true
 cmake.minimum-version = "3.21"
 minimum-version = "0.5.1"
-sdist.include = [".git", "llama.cpp/.git"]
+sdist.include = [".git", "ggml/.git"]
 
 [tool.scikit-build.metadata.version]
 provider = "scikit_build_core.metadata.regex"
