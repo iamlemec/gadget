@@ -3,6 +3,7 @@
 from math import sqrt
 
 from .ggml import (
+    LlamaPoolingType,
     ggml_norm,
     ggml_norm_inplace,
     ggml_rms_norm,
@@ -91,4 +92,3 @@ def feed_forward_layer(ctx, x, wu, bu, wd, bd, act='gelu', name=None):
     x = activations[act](ctx, x)
     x = linear_layer(ctx, x, wd, bd, name=f'{name}_down')
     return x
-

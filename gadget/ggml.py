@@ -1,7 +1,8 @@
 from .libs import _libggml
 
 from .libs.constants import(
-    GGMLQuantizationType
+    GGMLQuantizationType,
+    LlamaPoolingType,
 )
 
 from .libs._libggml import (

@@ -54,3 +54,11 @@ class GGMLQuantizationType(IntEnum):
     F64     = 28
     IQ1_M   = 29
     BF16    = 30
+
+# embed pooling types
+class LlamaPoolingType(IntEnum):
+    UNSPECIFIED = -1,
+    NONE = 0,
+    MEAN = 1,
+    CLS  = 2,
+    LAST = 3,

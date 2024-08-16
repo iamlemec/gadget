@@ -27,8 +27,11 @@ class BertModel(GgmlModel):
 
     def __init__(self, params, tensors, backend=None):
         # validate batch_size
-        if (bs := params['batch_size']) > (cl := params['bert.context_length']):
-            raise ValueError('batch_size ({bs}) > context_length ({cl})')
+        if 'batch_size' in params:
+            if (bs := params['batch_size']) > (cl := params['bert.context_length']):
+                raise ValueError('batch_size ({bs}) > context_length ({cl})')
+        else:
+            params['batch_size'] = params['bert.context_length']
 
         # pass to model constructor
         super().__init__(params, tensors, backend=backend)
@@ -50,7 +53,7 @@ class BertModel(GgmlModel):
         ]
 
         # get inputs
-        tokens, positions, mask = self.tensors['tokens', 'positions', 'attention']
+        tokens, positions, attention = self.tensors['tokens', 'positions', 'attention']
 
         # get token embeddings (token+type+position+norm)
         cur = ggml_get_rows(ctx, etok, tokens, name='embed=tok')
@@ -74,7 +77,7 @@ class BertModel(GgmlModel):
 
             # get attention interactions
             att = attention_layer(
-                ctx, cur, n_heads, mask, wq, bq, wk, bk, wv, bv, wo, bo,
+                ctx, cur, n_heads, attention, wq, bq, wk, bk, wv, bv, wo, bo,
                 eps=layer_norm_eps, name=f'attn{i}'
             )
 
@@ -89,5 +92,5 @@ class BertModel(GgmlModel):
             cur = ggml_add_inplace(ctx, cur, att, name=f'add{i}')
             cur = norm_layer(ctx, cur, wln, bln, layer_norm_eps, inplace=True, name=f'norm{i}')
 
-        # return embedding
+        # return embeddings
         return cur

@@ -7,7 +7,7 @@ from . import model
 from . import bert
 from . import embed
 
-from .ggml import GGMLQuantizationType
+from .ggml import GGMLQuantizationType, LlamaPoolingType
 from .loader import GgufFile
 from .compute import GgmlCompute
 from .model import GgmlModel
