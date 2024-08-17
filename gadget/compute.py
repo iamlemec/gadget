@@ -17,6 +17,8 @@ from .ggml import (
     ggml_new_tensor_3d,
     ggml_new_tensor_4d,
     ggml_set_name,
+    ggml_nelements,
+    ggml_internal_get_type_traits,
     ggml_new_graph,
     ggml_build_forward_expand,
     ggml_backend_cpu_init,
@@ -50,28 +52,29 @@ from .tensor import (
 # this assumes the data is contiguous
 # will implicity squeeze unit dimensions
 def array_to_tensor(array, tensor):
-    # check ctype support
-    ttype = get_tensor_type(tensor)
-    if ttype not in ttype_to_ctype:
-        raise ValueError(f'unsupported type: {ttype}')
-
-    # check dtype match
-    dtype = ttype_to_dtype[ttype]
-    if array.dtype != dtype:
-        raise ValueError(f'input dtype ({array.dtype}) does not match target dtype ({dtype})')
+    # safe bet is to require float32 input
+    if array.dtype != np.float32:
+        raise ValueError(f'input arrays must be dtype float32')
 
     # check shape match
-    shape = get_quant_shape(tensor)
+    shape = get_tensor_shape(tensor)
     if array.shape != shape:
         raise ValueError(f'input shape {array.shape} does not match target shape {shape}')
 
     # get data pointers
     src = array.ctypes.data
     dst = tensor.contents.data
-    size = array.nbytes
 
-    # copy data
-    ctypes.memmove(dst, src, size)
+    # do quant conversion if needed
+    ttype = get_tensor_type(tensor)
+    if ttype == GGMLQuantizationType.F32:
+        ctypes.memmove(dst, src, array.nbytes)
+    else:
+        src_p = ctypes.cast(src, ctypes.POINTER(ctypes.c_float))
+        dst_p = ctypes.cast(dst, ctypes.c_void_p)
+        size = ggml_nelements(tensor)
+        traits = ggml_internal_get_type_traits(ttype)
+        traits.from_float(src_p, dst_p, size)
 
 # this makes a new array and copies
 # we want to avoid deallocating ggml buffers
@@ -167,7 +170,7 @@ class GgmlCompute:
     # create computational graph
     def create_graph(self, model, graph_size=GGML_DEFAULT_GRAPH_SIZE):
         # compute memory requirements for graph
-        # NOTE: we need to keep reference to arr_graph reference around to prevent garbage collect!!!
+        # NOTE: need to keep reference to arr_graph around to prevent garbage collect!!!
         mem_graph = (
             ggml_graph_overhead() + ggml_tensor_overhead() * graph_size
         )
@@ -264,3 +267,50 @@ def test_compute(input_dim=64, output_dim=32, batch_size=16):
 
     # return result
     return match
+
+def test_quant(input_dim=64, output_dim=32, batch_size=16):
+    from .ggml import ggml_mul_mat, ggml_add
+
+    # model parameters
+    params = dict(
+        input_dim=input_dim, output_dim=output_dim, batch_size=batch_size
+    )
+
+    # tensor specifications
+    tensors = dict(
+        a = (GGMLQuantizationType.Q8_0, (output_dim, input_dim)),
+        b = (GGMLQuantizationType.F32, (output_dim,)),
+        x = (GGMLQuantizationType.F32, (batch_size, input_dim)),
+    )
+
+    # define model function
+    def test_model(ctx, par, ten):
+        n, m = par['input_dim'], par['output_dim']
+        a, b, x = ten['a'], ten['b'], ten['x']
+        x1 = ggml_mul_mat(ctx, a, x, name=f'x1')
+        x2 = ggml_add(ctx, x1, b, name=f'x2')
+        return x2
+
+    # create model graph
+    model = GgmlCompute(params, tensors, test_model)
+
+    # set weights
+    a_np = np.random.randn(output_dim, input_dim).astype(np.float32)
+    b_np = np.random.randn(output_dim).astype(np.float32)
+    model.set_input('a', a_np)
+    model.set_input('b', b_np)
+
+    # compute on input data
+    x_np = np.random.randn(batch_size, input_dim).astype(np.float32)
+    y_np = model(x=x_np)
+
+    # get numpy results
+    y0_np = (x_np @ a_np.T) + b_np[None,:]
+    match = np.allclose(y_np, y0_np, atol=1e-5)
+
+    # get rms and abs proportional errors
+    rmse = np.sqrt(np.square(y_np-y0_np).mean()) / np.abs(y0_np).mean()
+    abse = np.abs(y_np-y0_np).mean() / np.abs(y0_np).mean()
+
+    # return result
+    return match, rmse, abse

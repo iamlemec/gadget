@@ -231,6 +231,35 @@ ggml_tensor._fields_ = [
     ("extra"    , ctypes.c_void_p                        ),
 ]
 
+# types and quantization
+ggml_to_float_p          = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.POINTER(ctypes.c_float), ctypes.c_int64)
+ggml_from_float_p        = ctypes.CFUNCTYPE(None, ctypes.POINTER(ctypes.c_float), ctypes.c_void_p, ctypes.c_int64)
+ggml_from_float_to_mat_p = ctypes.CFUNCTYPE(None, ctypes.POINTER(ctypes.c_float), ctypes.c_void_p, ctypes.c_int64, ctypes.c_int64, ctypes.c_int64)
+ggml_vec_dot_p           = ctypes.CFUNCTYPE(None, ctypes.c_int, ctypes.POINTER(ctypes.c_float), ctypes.c_size_t, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_int)
+ggml_vec_dot_p           = ctypes.CFUNCTYPE(None, ctypes.c_int, ctypes.POINTER(ctypes.c_float), ctypes.c_size_t, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_int)
+ggml_gemv_p              = ctypes.CFUNCTYPE(None, ctypes.c_int, ctypes.POINTER(ctypes.c_float), ctypes.c_size_t, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int, ctypes.c_int)
+ggml_gemm_p              = ctypes.CFUNCTYPE(None, ctypes.c_int, ctypes.POINTER(ctypes.c_float), ctypes.c_size_t, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int, ctypes.c_int)
+
+class ggml_type_traits(ctypes.Structure):
+    _fields_ = [
+        ("type_name"           , ctypes.c_char_p         ),
+        ("blck_size"           , ctypes.c_int            ),
+        ("blck_size_interleave", ctypes.c_int64          ),
+        ("type_size"           , ctypes.c_size_t         ),
+        ("is_quantized"        , ctypes.c_bool           ),
+        ("to_float"            , ggml_to_float_p         ),
+        ("from_float"          , ggml_from_float_p       ),
+        ("from_float_ref"      , ggml_from_float_p       ),
+        ("from_float_to_mat"   , ggml_from_float_to_mat_p),
+        ("vec_dot"             , ggml_vec_dot_p          ),
+        ("vec_dot_type"        , ctypes.c_int            ),
+        ("nrows"               , ctypes.c_int64          ),
+        ("ncols"               , ctypes.c_int64          ),
+        ("gemv"                , ggml_gemv_p             ),
+        ("gemm"                , ggml_gemm_p             ),
+    ]
+ggml_type_traits_p = ctypes.POINTER(ggml_type_traits)
+
 # graph construction
 class ggml_hash_set(ctypes.Structure):
     _fields_ = [
@@ -492,6 +521,18 @@ def ggml_new_tensor_4d(ctx, type, ne0, ne1, ne2, ne3): ...
     None
 )
 def ggml_set_name(tensor, name): ...
+
+@ctypes_function(_ggml,
+    [ggml_tensor_p],
+    ctypes.c_int64
+)
+def ggml_nelements(tensor): ...
+
+@ctypes_function(_ggml,
+    [ctypes.c_int],
+    ggml_type_traits
+)
+def ggml_internal_get_type_traits(ttype): ...
 
 ## graphs
 
