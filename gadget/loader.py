@@ -109,8 +109,8 @@ class MmapWriter:
 
 class GgufFile:
     def __init__(self):
-        self.fields  = {}
-        self.tensors = {}
+        self.fields   = {}
+        self.tensors  = {}
 
     @classmethod
     def from_path(cls, path, **kwargs):
@@ -133,7 +133,6 @@ class GgufFile:
         n_fields = self.read_uint64()
 
         # read fields
-        self.fields = {}
         for _ in range(n_fields):
             # get metadata
             name = self.read_unicode()
@@ -191,7 +190,6 @@ class GgufFile:
             tensor_base += alignment - padding
 
         # read weights
-        self.tensors = {}
         for name, (ttype, shape, shape1, offset, size) in metadata.items():
             self.offset = tensor_base + offset
             dtype = ttype_to_type[ttype]
@@ -398,8 +396,13 @@ class GgufFile:
         else:
             raise ValueError(f'Unsupported dtype: {value.dtype}')
 
+        # can only accept float32 right now
+        if ttype != GGMLQuantizationType.F32:
+            raise ValueError('Can only directly set F32 tensors')
+        shape = value.shape
+
         # store tensor
-        self.tensors[name] = ttype, value
+        self.tensors[name] = ttype, shape, value
 
     def get_tensor(self, name):
         return self.tensors.get(name)

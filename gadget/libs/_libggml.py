@@ -530,6 +530,12 @@ def ggml_nelements(tensor): ...
 
 @ctypes_function(_ggml,
     [ctypes.c_int],
+    ctypes.c_bool
+)
+def ggml_is_quantized(tensor): ...
+
+@ctypes_function(_ggml,
+    [ctypes.c_int],
     ggml_type_traits
 )
 def ggml_internal_get_type_traits(ttype): ...

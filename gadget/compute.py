@@ -18,6 +18,7 @@ from .ggml import (
     ggml_new_tensor_4d,
     ggml_set_name,
     ggml_nelements,
+    ggml_is_quantized,
     ggml_internal_get_type_traits,
     ggml_new_graph,
     ggml_build_forward_expand,
@@ -52,13 +53,25 @@ from .tensor import (
 # this assumes the data is contiguous
 # will implicity squeeze unit dimensions
 def array_to_tensor(array, tensor):
-    # safe bet is to require float32 input
-    if array.dtype != np.float32:
-        raise ValueError(f'input arrays must be dtype float32')
+    # get expected dtype
+    ttype = get_tensor_type(tensor)
+    dtype = ttype_to_dtype[ttype]
+    shape = get_tensor_shape(tensor)
+
+    # get quantization situation
+    quant = ggml_is_quantized(ttype)
+    qshape = get_quant_shape(tensor)
+    is_quantized = quant and array.dtype == np.uint8
+    will_quantize = quant and array.dtype == np.float32
+
+    # check type match
+    if not will_quantize and dtype != array.dtype:
+        raise ValueError(f'array dtype ({array.dtype}) does not match expected dtype ({dtype})')
 
     # check shape match
-    shape = get_tensor_shape(tensor)
-    if array.shape != shape:
+    if is_quantized and array.shape != qshape:
+        raise ValueError(f'input shape {array.shape} does not match target (quantized) shape {qshape}')
+    if not is_quantized and array.shape != shape:
         raise ValueError(f'input shape {array.shape} does not match target shape {shape}')
 
     # get data pointers
@@ -66,8 +79,7 @@ def array_to_tensor(array, tensor):
     dst = tensor.contents.data
 
     # do quant conversion if needed
-    ttype = get_tensor_type(tensor)
-    if ttype == GGMLQuantizationType.F32:
+    if not will_quantize:
         ctypes.memmove(dst, src, array.nbytes)
     else:
         src_p = ctypes.cast(src, ctypes.POINTER(ctypes.c_float))
