@@ -4,9 +4,13 @@ import numpy as np
 from gadget.embed import test_embed
 
 # configure
-gguf_path = '/home/doug/fast/embed/bge-micro-v2-f32.gguf'
+gg_path = '/home/doug/fast/embed'
 hf_model = 'TaylorAI/bge-micro-v2'
 
-# run test
-results = test_embed(gguf_path, hf_model, batch_size=512)
-
+# run tests
+print('bge-micro:f32')
+test_embed(f'{gg_path}/bge-micro-v2-f32.gguf', hf_model)
+print('bge-micro:q8_0')
+test_embed(f'{gg_path}/bge-micro-v2-q8_0.gguf', hf_model)
+print('bge-micro:q4_k_m')
+test_embed(f'{gg_path}/bge-micro-v2-q4_k_m.gguf', hf_model)
