@@ -42,7 +42,7 @@ from .tensor import (
     get_tensor_shape,
     get_tensor_type,
     get_tensor_info,
-    get_quant_shape,
+    get_data_shape,
     create_tensor,
 )
 
@@ -60,7 +60,7 @@ def array_to_tensor(array, tensor):
 
     # get quantization situation
     quant = ggml_is_quantized(ttype)
-    qshape = get_quant_shape(tensor)
+    dshape = get_data_shape(tensor)
     is_quantized = quant and array.dtype == np.uint8
     will_quantize = quant and array.dtype == np.float32
 
@@ -69,8 +69,8 @@ def array_to_tensor(array, tensor):
         raise ValueError(f'array dtype ({array.dtype}) does not match expected dtype ({dtype})')
 
     # check shape match
-    if is_quantized and array.shape != qshape:
-        raise ValueError(f'input shape {array.shape} does not match target (quantized) shape {qshape}')
+    if is_quantized and array.shape != dshape:
+        raise ValueError(f'input shape {array.shape} does not match target (quantized) shape {dshape}')
     if not is_quantized and array.shape != shape:
         raise ValueError(f'input shape {array.shape} does not match target shape {shape}')
 
@@ -79,14 +79,14 @@ def array_to_tensor(array, tensor):
     dst = tensor.contents.data
 
     # do quant conversion if needed
-    if not will_quantize:
-        ctypes.memmove(dst, src, array.nbytes)
-    else:
+    if will_quantize:
         src_p = ctypes.cast(src, ctypes.POINTER(ctypes.c_float))
         dst_p = ctypes.cast(dst, ctypes.c_void_p)
         size = ggml_nelements(tensor)
         traits = ggml_internal_get_type_traits(ttype)
         traits.from_float(src_p, dst_p, size)
+    else:
+        ctypes.memmove(dst, src, array.nbytes)
 
 # this makes a new array and copies
 # we want to avoid deallocating ggml buffers

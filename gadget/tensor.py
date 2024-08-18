@@ -110,15 +110,28 @@ def get_tensor_info(tensor):
     stat = f'{name}: {ttype.name} × {shape}'
     return stat
 
-def get_quant_shape(tensor):
+def get_block_shape(tensor):
     ttype = get_tensor_type(tensor)
     shape = get_tensor_shape(tensor)
-    dims = len(shape)
     block_size, type_size = GGML_QUANT_SIZES[ttype]
-    shape1 = tuple(
+    dims = len(shape)
+    bshape = tuple(
         s // block_size if i == dims - 1 else s for i, s in enumerate(shape)
     )
-    return shape1
+    return bshape
+
+def get_data_shape(tensor):
+    ttype = get_tensor_type(tensor)
+    shape = get_tensor_shape(tensor)
+    dtype = ttype_to_dtype[ttype]
+    dtype_size = np.dtype(dtype).itemsize
+    block_size, type_size = GGML_QUANT_SIZES[ttype]
+    dims = len(shape)
+    dshape = tuple(
+        (s // block_size) * (type_size // dtype_size) if i == dims - 1 else s
+        for i, s in enumerate(shape)
+    )
+    return dshape
 
 ##
 ## tensor creation

@@ -172,16 +172,19 @@ class GgufFile:
             offset = self.read_uint64()
 
             # get array shape and size in numpy form
+            dtype = ttype_to_type[ttype]
             shape = tuple(map(int, gshape.tolist()[::-1]))
-            size = prod(shape)
 
-            # adjust shape and size for quant type block_size
+            # adjust shape for quant type block_size and dtype
             block_size, type_size = GGML_QUANT_SIZES[ttype]
-            size1 = prod(shape) // block_size
-            shape1 = tuple(s // block_size if i == dims - 1 else s for i, s in enumerate(shape))
+            dtype_size = np.dtype(dtype).itemsize
+            dshape = tuple(
+                (s // block_size) * (type_size // dtype_size) if i == dims - 1 else s
+                for i, s in enumerate(shape)
+            )
 
             # save metadata for later
-            metadata[name] = ttype, shape, shape1, offset, size1
+            metadata[name] = ttype, shape, dtype, dshape, offset
 
         # jump to alignment
         tensor_base = self.offset
@@ -190,11 +193,11 @@ class GgufFile:
             tensor_base += alignment - padding
 
         # read weights
-        for name, (ttype, shape, shape1, offset, size) in metadata.items():
+        for name, (ttype, shape, dtype, dshape, offset) in metadata.items():
             self.offset = tensor_base + offset
-            dtype = ttype_to_type[ttype]
+            size = prod(dshape)
             vals = self.read(dtype, count=size)
-            self.tensors[name] = ttype, shape, vals.reshape(shape1)
+            self.tensors[name] = ttype, shape, vals.reshape(dshape)
 
         # return model
         return self
