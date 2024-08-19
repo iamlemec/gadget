@@ -118,10 +118,7 @@ def tensor_to_array(tensor, framework='numpy', device='cpu', float32=False):
     # get type and shape
     ttype = get_tensor_type(tensor)
     shape = get_tensor_shape(tensor)
-
-    # get quantization situation
     quant = ggml_is_quantized(ttype)
-    halve = is_half(ttype)
 
     # create numpy array
     ntype = 'float32' if (quant or float32) else ttype_to_ntype[ttype]
@@ -204,14 +201,17 @@ class GgmlCompute:
         # assign tensors on backend
         self.backend_buf = ggml_backend_alloc_ctx_tensors(self.ctx_tensors, self.backend)
 
-    # get tensor values as numpy (copy)
-    def get_input(self, name, framework=None, device=None):
+    def get_tensor(self, tensor, framework=None, device=None):
         if framework is None:
             framework = self.framework
         if device is None:
             device = self.backend_type
-        tensor = self.tensors[name]
         return tensor_to_array(tensor, framework=framework, device=device)
+
+    # get tensor values as numpy (copy)
+    def get_input(self, name, **kwargs):
+        tensor = self.tensors[name]
+        return self.get_tensor(tensor, **kwargs)
 
     # set tensor values using numpy
     def set_input(self, name, array):
@@ -221,24 +221,20 @@ class GgmlCompute:
         except ValueError as e:
             raise ValueError(f'error setting input "{name}":\n{e}')
 
-    def get_node(self, index, framework=None, device=None):
-        if framework is None:
-            framework = self.framework
-        if device is None:
-            device = self.backend_type
+    def get_node(self, index, **kwargs):
         n_nodes = self.graph.contents.n_nodes
         if index >= n_nodes:
             raise ValueError(f'index ({index}) >= n_nodes ({n_nodes})')
-        node = self.graph.contents.nodes[index]
-        return tensor_to_array(node, framework=framework, device=device)
+        tensor = self.graph.contents.nodes[index]
+        return self.get_tensor(tensor, **kwargs)
 
     def get_named_node(self, name, **kwargs):
         n_nodes = self.graph.contents.n_nodes
         for i in range(n_nodes):
-            node = self.graph.contents.nodes[i]
-            tname = get_tensor_name(node)
+            tensor = self.graph.contents.nodes[i]
+            tname = get_tensor_name(tensor)
             if tname == name:
-                return get_node(i, **kwargs)
+                return self.get_tensor(tensor, **kwargs)
         raise ValueError(f'node named "{name}" not found')
 
     # create computational graph
@@ -272,7 +268,7 @@ class GgmlCompute:
     def compute(self):
         ggml_backend_graph_compute(self.backend, self.graph)
 
-    def __call__(self, framework=None, device=None, **values):
+    def __call__(self, **values):
         # set input values
         for name, value in values.items():
             self.set_input(name, value)
@@ -281,9 +277,7 @@ class GgmlCompute:
         self.compute()
 
         # get results
-        output_np = tensor_to_array(
-            self.output, framework=self.framework, device=self.backend_type
-        )
+        output_np = self.get_tensor(self.output)
 
         # return results
         return output_np
@@ -339,7 +333,7 @@ def test_compute(input_dim=256, output_dim=32, batch_size=16, qtype=T.F32, **kwa
     x_np = np.random.randn(batch_size, input_dim).astype(np.float32)
     y_np = model(x=x_np)
 
-    # bring to numpy if needed
+    # bring to host numpy if needed
     if hasattr(y_np, 'numpy'):
         y_np = y_np.cpu().numpy()
 
