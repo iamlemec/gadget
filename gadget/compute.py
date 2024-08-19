@@ -39,6 +39,7 @@ from .tensor import (
     ttype_to_dtype,
     get_tensor_shape,
     get_tensor_type,
+    get_tensor_name,
     get_tensor_info,
     get_data_shape,
     create_tensor,
@@ -189,6 +190,22 @@ class GgmlCompute:
             array_to_tensor(array, tensor)
         except ValueError as e:
             raise ValueError(f'error setting input "{name}":\n{e}')
+
+    def get_node(self, index):
+        n_nodes = self.graph.contents.n_nodes
+        if index >= n_nodes:
+            raise ValueError(f'index ({index}) >= n_nodes ({n_nodes})')
+        node = self.graph.contents.nodes[index]
+        return tensor_to_array(node)
+
+    def get_named_node(self, name):
+        n_nodes = self.graph.contents.n_nodes
+        for i in range(n_nodes):
+            node = self.graph.contents.nodes[i]
+            tname = get_tensor_name(node)
+            if tname == name:
+                return tensor_to_array(node)
+        raise ValueError(f'node named "{name}" not found')
 
     # create computational graph
     def create_graph(self, model, graph_size=GGML_DEFAULT_GRAPH_SIZE):
