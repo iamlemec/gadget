@@ -36,12 +36,16 @@ from .ggml import (
 )
 from .libs.general import malloc, free
 from .tensor import (
-    ttype_to_dtype,
+    is_half,
+    ttype_to_ntype,
+    get_array_ntype,
+    get_array_data,
     get_tensor_shape,
     get_tensor_type,
     get_tensor_name,
     get_tensor_info,
     get_data_shape,
+    create_array,
     create_tensor,
 )
 
@@ -52,39 +56,41 @@ from .tensor import (
 # this assumes the data is contiguous
 # will implicity squeeze unit dimensions
 def array_to_tensor(array, tensor):
-    # convert from torch (view)
-    if hasattr(array, 'numpy'):
-        array = array.numpy()
+    # get array type and shape (numpy or torch)
+    atype = get_array_ntype(array)
+    ashape = array.shape
 
-    # get dtype and shape
+    # get tensor type and shape
     ttype = get_tensor_type(tensor)
-    dtype = ttype_to_dtype[ttype]
+    ntype = ttype_to_ntype[ttype]
     shape = get_tensor_shape(tensor)
+    dshape = get_data_shape(tensor)
 
     # get quantization situation
     quant = ggml_is_quantized(ttype)
-    dshape = get_data_shape(tensor)
-    is_quantized = quant and array.dtype == np.uint8
-    will_quantize = quant and array.dtype == np.float32
+    halve = is_half(ttype)
+    is_quantized = quant and atype == 'uint8'
+    will_quantize = quant and atype == 'float32'
+    will_halve = halve and atype == 'float32'
 
     # check type match
     if quant and not (is_quantized or will_quantize):
         raise ValueError(f'for quantized tensors, inputs must be either pre-quantized uint8 or ready-to-quantize float32')
-    if not will_quantize and dtype != array.dtype:
-        raise ValueError(f'array dtype ({array.dtype}) does not match expected dtype ({dtype})')
+    if not (will_quantize or will_halve) and ntype != atype:
+        raise ValueError(f'array dtype ({atype}) does not match expected dtype ({ntype})')
 
     # check shape match
-    if is_quantized and array.shape != dshape:
+    if is_quantized and ashape != dshape:
         raise ValueError(f'input shape {array.shape} does not match target (quantized) shape {dshape}')
-    if not is_quantized and array.shape != shape:
+    if not is_quantized and ashape != shape:
         raise ValueError(f'input shape {array.shape} does not match target shape {shape}')
 
     # get data pointers
-    src = array.ctypes.data
+    src = get_array_data(array)
     dst = tensor.contents.data
 
     # do quant conversion if needed
-    if will_quantize:
+    if will_quantize or will_halve:
         src_p = ctypes.cast(src, ctypes.POINTER(ctypes.c_float))
         dst_p = ctypes.cast(dst, ctypes.c_void_p)
         size = ggml_nelements(tensor)
@@ -95,24 +101,25 @@ def array_to_tensor(array, tensor):
 
 # this makes a new array and copies
 # we want to avoid deallocating ggml buffers
-def tensor_to_array(tensor):
+def tensor_to_array(tensor, framework='numpy', float32=False):
     # get type and shape
     ttype = get_tensor_type(tensor)
     shape = get_tensor_shape(tensor)
 
     # get quantization situation
     quant = ggml_is_quantized(ttype)
-    dtype = np.float32 if quant else ttype_to_dtype[ttype]
+    halve = is_half(ttype)
 
     # create numpy array
-    array = np.empty(shape, dtype=dtype)
+    ntype = 'float32' if (quant or float32) else ttype_to_ntype[ttype]
+    array = create_array(ntype, shape, framework=framework)
 
     # get copy params
     src = tensor.contents.data
-    dst = array.ctypes.data
+    dst = get_array_data(array)
 
     # copy in correct manner
-    if quant:
+    if quant or float32:
         src_p = ctypes.cast(src, ctypes.c_void_p)
         dst_p = ctypes.cast(dst, ctypes.POINTER(ctypes.c_float))
         size = ggml_nelements(tensor)
@@ -179,9 +186,9 @@ class GgmlCompute:
         self.backend_buf = ggml_backend_alloc_ctx_tensors(self.ctx_tensors, self.backend)
 
     # get tensor values as numpy (copy)
-    def get_input(self, name):
+    def get_input(self, name, **kwargs):
         tensor = self.tensors[name]
-        return tensor_to_array(tensor)
+        return tensor_to_array(tensor, **kwargs)
 
     # set tensor values using numpy
     def set_input(self, name, array):
@@ -191,12 +198,12 @@ class GgmlCompute:
         except ValueError as e:
             raise ValueError(f'error setting input "{name}":\n{e}')
 
-    def get_node(self, index):
+    def get_node(self, index, **kwargs):
         n_nodes = self.graph.contents.n_nodes
         if index >= n_nodes:
             raise ValueError(f'index ({index}) >= n_nodes ({n_nodes})')
         node = self.graph.contents.nodes[index]
-        return tensor_to_array(node)
+        return tensor_to_array(node, **kwargs)
 
     def get_named_node(self, name):
         n_nodes = self.graph.contents.n_nodes
@@ -292,8 +299,7 @@ def test_compute(input_dim=256, output_dim=32, batch_size=16, qtype=T.F32):
     model = GgmlCompute(params, tensors, test_model)
 
     # set weights
-    a_dtype = np.float16 if qtype == T.F16 else np.float32
-    a_np = np.random.randn(output_dim, input_dim).astype(a_dtype)
+    a_np = np.random.randn(output_dim, input_dim).astype(np.float32)
     b_np = np.random.randn(output_dim).astype(np.float32)
     model.set_input('a', a_np)
     model.set_input('b', b_np)

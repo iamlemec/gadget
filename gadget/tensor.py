@@ -4,7 +4,7 @@ import ctypes
 import numpy as np
 
 from .ggml import (
-    GGMLQuantizationType,
+    GGMLQuantizationType as T,
     ggml_set_name,
     ggml_new_tensor_1d,
     ggml_new_tensor_2d,
@@ -17,41 +17,93 @@ from .ggml import (
 ## type conversion
 ##
 
-ttype_to_dtype = {
-    GGMLQuantizationType.F32: np.float32,
-    GGMLQuantizationType.F16: np.float16,
-    GGMLQuantizationType.Q4_0: np.uint8,
-    GGMLQuantizationType.Q4_1: np.uint8,
-    GGMLQuantizationType.Q5_0: np.uint8,
-    GGMLQuantizationType.Q5_1: np.uint8,
-    GGMLQuantizationType.Q8_0: np.uint8,
-    GGMLQuantizationType.Q8_1: np.uint8,
-    GGMLQuantizationType.Q2_K: np.uint8,
-    GGMLQuantizationType.Q3_K: np.uint8,
-    GGMLQuantizationType.Q4_K: np.uint8,
-    GGMLQuantizationType.Q5_K: np.uint8,
-    GGMLQuantizationType.Q6_K: np.uint8,
-    GGMLQuantizationType.Q8_K: np.uint8,
-    GGMLQuantizationType.IQ2_XXS: np.uint8,
-    GGMLQuantizationType.IQ2_XS: np.uint8,
-    GGMLQuantizationType.IQ3_XXS: np.uint8,
-    GGMLQuantizationType.IQ1_S: np.uint8,
-    GGMLQuantizationType.IQ4_NL: np.uint8,
-    GGMLQuantizationType.IQ3_S: np.uint8,
-    GGMLQuantizationType.IQ2_S: np.uint8,
-    GGMLQuantizationType.IQ4_XS: np.uint8,
-    GGMLQuantizationType.I8: np.int8,
-    GGMLQuantizationType.I16: np.int16,
-    GGMLQuantizationType.I32: np.int32,
-    GGMLQuantizationType.I64: np.int64,
-    GGMLQuantizationType.F64: np.float64,
-    GGMLQuantizationType.IQ1_M: np.uint8,
-    # GGMLQuantizationType.BF16: np.bfloat16, # not supported by ctypes
+ttype_to_ntype = {
+    T.F32: 'float32',
+    T.F16: 'float16',
+    T.Q4_0: 'uint8',
+    T.Q4_1: 'uint8',
+    T.Q5_0: 'uint8',
+    T.Q5_1: 'uint8',
+    T.Q8_0: 'uint8',
+    T.Q8_1: 'uint8',
+    T.Q2_K: 'uint8',
+    T.Q3_K: 'uint8',
+    T.Q4_K: 'uint8',
+    T.Q5_K: 'uint8',
+    T.Q6_K: 'uint8',
+    T.Q8_K: 'uint8',
+    T.IQ2_XXS: 'uint8',
+    T.IQ2_XS: 'uint8',
+    T.IQ3_XXS: 'uint8',
+    T.IQ1_S: 'uint8',
+    T.IQ4_NL: 'uint8',
+    T.IQ3_S: 'uint8',
+    T.IQ2_S: 'uint8',
+    T.IQ4_XS: 'uint8',
+    T.I8: 'int8',
+    T.I16: 'int16',
+    T.I32: 'int32',
+    T.I64: 'int64',
+    T.F64: 'float64',
+    T.IQ1_M: 'uint8',
+    T.BF16: 'bfloat16',
 }
+
+ttype_to_dtype = {
+    k: getattr(np, v) for k, v in ttype_to_ntype.items() if hasattr(np, v)
+}
+
+ntype_width = {
+    'uint8': 1,
+    'int8': 1,
+    'int16': 2,
+    'int32': 4,
+    'int64': 8,
+    'float16': 2,
+    'float32': 4,
+    'float64': 8,
+    'bfloat16': 2,
+}
+
+##
+## array functions (array framework agnostic)
+##
+
+def get_framework(framework):
+    if framework == 'numpy':
+        lib = np
+    elif framework == 'torch':
+        import torch
+        lib = torch
+    else:
+        raise ValueError(f'unknown array framework {library}')
+    return lib
+
+def create_array(ntype, shape, framework='numpy'):
+    fw = get_framework(framework)
+    if not hasattr(fw, ntype):
+        raise ValueError(f'dtype {ntype} not supported by framework {framework}')
+    dtype = getattr(fw, ntype)
+    array = fw.empty(shape, dtype=dtype)
+    return array
+
+def get_array_ntype(array):
+    return str(array.dtype).removeprefix('torch.')
+
+def get_array_data(array):
+    if hasattr(array, 'ctypes'):
+        return array.ctypes.data
+    elif hasattr(array, 'data_ptr'):
+        return array.data_ptr()
+    else:
+        raise TypeError(f'unknown array type {type(array)}')
 
 ##
 ## tensor functions
 ##
+
+def is_half(ttype):
+    return ttype in (T.F16, T.BF16)
 
 def trim_nelem(shape):
     dims = 1 + max([
@@ -62,7 +114,6 @@ def trim_nelem(shape):
 def get_type_traits(ttype):
     traits = ggml_internal_get_type_traits(ttype)
     return traits.blck_size, traits.type_size
-
 
 def get_tensor_name(tensor):
     value = tensor.contents
@@ -75,7 +126,7 @@ def get_tensor_shape(tensor):
 
 def get_tensor_type(tensor):
     value = tensor.contents
-    return GGMLQuantizationType(value.type)
+    return T(value.type)
 
 def get_tensor_info(tensor):
     name = get_tensor_name(tensor)
@@ -97,12 +148,12 @@ def get_block_shape(tensor):
 def get_data_shape(tensor):
     ttype = get_tensor_type(tensor)
     shape = get_tensor_shape(tensor)
-    dtype = ttype_to_dtype[ttype]
-    dtype_size = np.dtype(dtype).itemsize
+    ntype = ttype_to_ntype[ttype]
+    ntype_size = ntype_width[ntype]
     block_size, type_size = get_type_traits(ttype)
     dims = len(shape)
     dshape = tuple(
-        (s // block_size) * (type_size // dtype_size) if i == dims - 1 else s
+        (s // block_size) * (type_size // ntype_size) if i == dims - 1 else s
         for i, s in enumerate(shape)
     )
     return dshape
