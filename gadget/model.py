@@ -42,11 +42,14 @@ def freeze(func):
     return wrapper
 
 class GgmlModel(GgmlCompute):
-    def __init__(self, params, tensors, backend=None):
-        super().__init__(params, tensors, freeze(self.forward), backend=backend)
+    def __init__(self, params, tensors, backend=None, framework=None):
+        super().__init__(
+            params, tensors, freeze(self.forward),
+            backend=backend, framework=framework
+        )
 
     @classmethod
-    def from_gguf(cls, gguf, backend=None, **params):
+    def from_gguf(cls, gguf, backend=None, framework=None, **params):
         # get metadata from gguf
         weights = {
             key: (ttype, shape)
@@ -69,7 +72,10 @@ class GgmlModel(GgmlCompute):
         }
 
         # create model and graph
-        self = cls(gguf.fields | params0 | params, weights | inputs, backend=backend)
+        self = cls(
+            gguf.fields | params0 | params, weights | inputs,
+            backend=backend, framework=framework
+        )
 
         # assign tensors on backend
         for name, (ttype, shape, tensor) in gguf.tensors.items():

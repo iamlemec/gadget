@@ -29,7 +29,7 @@ def l2_normalize(values, axis=-1):
     return values / np.linalg.norm(values, axis=axis, keepdims=True)
 
 # this assumes that sequences are packed in order
-def pool_embeds(embeds, pooling, seqids):
+def pool_embeds(pooling, embeds, seqids):
     if pooling == LlamaPoolingType.NONE:
         pooled = embeds
     elif pooling == LlamaPoolingType.MEAN:
@@ -64,20 +64,25 @@ class EmbedModel:
         self.pooling = pooling
 
     def encode(self, tokens, sequences=None, positions=None):
+        # get input length
+        n_tokens = len(tokens)
+
+        # handle single sequence case
+        if sequences is None:
+            sequences = np.zeros(n_tokens, dtype=np.int32)
+        if positions is None:
+            positions = np.arange(self.batch_size, dtype=np.int32)
+
         # ensure ndarray inputs
         tokens = np.asarray(tokens, dtype=np.int32)
         sequences = np.asarray(sequences, dtype=np.int32)
         positions = np.asarray(positions, dtype=np.int32)
 
-        # handle single sequence case
-        if sequences is None:
-            sequences = np.zeros_like(tokens, dtype=np.int32)
-        if positions is None:
-            positions = np.arange(self.batch_size, dtype=np.int32)
-
         # set up attention matrix and compute
         attention = attention_matrix(sequences).astype(np.float32)
         embed = self.model(tokens=tokens, positions=positions, attention=attention)
+
+        # return embeddings
         return embed
 
     def embed(self, texts, pooling=None, normalize=True):
@@ -99,11 +104,11 @@ class EmbedModel:
         seqids = pad_concat([n * [i] for i, n in enumerate(ntoks)], batch_size, np.int32, -1)
 
         # call model encoder
-        embeds = self.encode(tokens, positions=posits, sequences=seqids)[:total,:]
+        embeds = self.encode(tokens, positions=posits, sequences=seqids)
 
         # do requested pooling
         pooling = self.pooling if pooling is None else pooling
-        embeds = pool_embeds(embeds, pooling, seqids[:total])
+        embeds = pool_embeds(pooling, embeds[:total,:], seqids[:total])
 
         # return embeddings
         if normalize:
@@ -129,7 +134,7 @@ def test_embed(gguf_path, model_id, prompt='hello world', model_class=BertModel,
     hf_input = hf_toker(prompt, return_tensors='pt')['input_ids']
     hf_seqid = torch.zeros_like(hf_input).numpy()
     hf_state = hf_model(hf_input).last_hidden_state[0].detach().numpy()
-    hf_poold = pool_embeds(hf_state, gg_model.pooling, hf_seqid)
+    hf_poold = pool_embeds(gg_model.pooling, hf_state, hf_seqid)
     hf_embed = l2_normalize(hf_poold)
 
     # embed with ggml

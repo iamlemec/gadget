@@ -435,6 +435,12 @@ def ggml_graph_overhead(): ...
 def ggml_backend_cpu_init(): ...
 
 @ctypes_function(_ggml,
+    [ctypes.c_int],
+    ggml_backend_p
+)
+def ggml_backend_cuda_init(): ...
+
+@ctypes_function(_ggml,
     None,
     ggml_backend_p
 )
@@ -463,6 +469,36 @@ def ggml_backend_alloc_ctx_tensors(): ...
     ctypes.c_int
 )
 def ggml_backend_graph_compute(backend, cgraph): ...
+
+@ctypes_function(_ggml,
+    [ggml_tensor_p, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_size_t],
+    None
+)
+def ggml_backend_tensor_set(tensor, data, offset, size): ...
+
+@ctypes_function(_ggml,
+    [ggml_tensor_p, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_size_t],
+    None
+)
+def ggml_backend_tensor_get(tensor, data, offset, size): ...
+
+@ctypes_function(_ggml,
+    [ggml_tensor_p, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_size_t],
+    None
+)
+def ggml_backend_tensor_set_async(tensor, data, offset, size): ...
+
+@ctypes_function(_ggml,
+    [ggml_tensor_p, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_size_t],
+    None
+)
+def ggml_backend_tensor_get_async(tensor, data, offset, size): ...
+
+@ctypes_function(_ggml,
+    [ggml_backend_buffer_p],
+    ctypes.c_bool
+)
+def ggml_backend_buffer_is_host(buffer): ...
 
 ## allocation
 

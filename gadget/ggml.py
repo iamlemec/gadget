@@ -16,11 +16,17 @@ from .libs._libggml import (
     ggml_graph_overhead,
     # backend
     ggml_backend_cpu_init,
+    ggml_backend_cuda_init,
     ggml_backend_free,
     ggml_backend_alloc_ctx_tensors,
     ggml_backend_get_default_buffer_type,
     ggml_backend_cpu_set_n_threads,
     ggml_backend_graph_compute,
+    ggml_backend_buffer_is_host,
+    ggml_backend_tensor_set,
+    ggml_backend_tensor_get,
+    ggml_backend_tensor_set_async,
+    ggml_backend_tensor_get_async,
     # allocation
     ggml_gallocr_new,
     ggml_gallocr_reserve,

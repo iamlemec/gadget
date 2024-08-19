@@ -11,6 +11,7 @@ from .ggml import (
     ggml_new_tensor_3d,
     ggml_new_tensor_4d,
     ggml_internal_get_type_traits,
+    ggml_backend_buffer_is_host,
 )
 
 ##
@@ -79,12 +80,12 @@ def get_framework(framework):
         raise ValueError(f'unknown array framework {library}')
     return lib
 
-def create_array(ntype, shape, framework='numpy'):
+def create_array(ntype, shape, framework='numpy', device='cpu'):
     fw = get_framework(framework)
     if not hasattr(fw, ntype):
         raise ValueError(f'dtype {ntype} not supported by framework {framework}')
     dtype = getattr(fw, ntype)
-    array = fw.empty(shape, dtype=dtype)
+    array = fw.empty(shape, dtype=dtype, device=device)
     return array
 
 def get_array_ntype(array):
@@ -118,6 +119,11 @@ def get_type_traits(ttype):
 def get_tensor_name(tensor):
     value = tensor.contents
     return value.name.decode('utf-8')
+
+def get_tensor_is_host(tensor):
+    buffer = tensor.contents.buffer
+    is_host = ggml_backend_buffer_is_host(buffer)
+    return is_host
 
 def get_tensor_shape(tensor):
     value = tensor.contents

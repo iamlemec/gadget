@@ -14,4 +14,6 @@ from .model import GgmlModel
 from .bert import BertModel
 from .embed import EmbedModel
 
+from .ggml import GGMLQuantizationType as T
+
 __version__ = "0.1"
