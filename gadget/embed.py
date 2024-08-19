@@ -134,9 +134,7 @@ def test_embed(gguf_path, model_id, prompt='hello world', model_class=BertModel,
 
     # embed with ggml
     gg_embed = gg_model.embed(prompt)
-
-    # check results
     simil = (hf_embed * gg_embed).sum()
     print(simil)
 
-    return hf_embed, gg_embed
+    return gg_model

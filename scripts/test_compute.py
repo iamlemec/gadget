@@ -1,11 +1,13 @@
 # test compute interface
 
 import gadget
+from gadget.ggml import GGMLQuantizationType as T
 
-print('dense')
-match = gadget.compute.test_compute()
-print(match)
-
-print('quant')
-match, rmse, abse = gadget.compute.test_quant()
-print(match, rmse, abse)
+print('F32')
+match = gadget.compute.test_compute(qtype=T.F32)
+print('F16')
+match = gadget.compute.test_compute(qtype=T.F16)
+print('Q8_0')
+match = gadget.compute.test_compute(qtype=T.Q8_0)
+print('Q4_0')
+match = gadget.compute.test_compute(qtype=T.Q4_0)

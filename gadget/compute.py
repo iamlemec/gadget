@@ -51,7 +51,11 @@ from .tensor import (
 # this assumes the data is contiguous
 # will implicity squeeze unit dimensions
 def array_to_tensor(array, tensor):
-    # get expected dtype
+    # convert from torch (view)
+    if hasattr(array, 'numpy'):
+        array = array.numpy()
+
+    # get dtype and shape
     ttype = get_tensor_type(tensor)
     dtype = ttype_to_dtype[ttype]
     shape = get_tensor_shape(tensor)
@@ -91,23 +95,30 @@ def array_to_tensor(array, tensor):
 # this makes a new array and copies
 # we want to avoid deallocating ggml buffers
 def tensor_to_array(tensor):
-    # check ctype support
+    # get type and shape
     ttype = get_tensor_type(tensor)
-    if ttype not in ttype_to_dtype:
-        raise ValueError(f'unsupported type: {ttype}')
-
-    # get data pointers
-    src = tensor.contents.data
     shape = get_tensor_shape(tensor)
-    dtype = ttype_to_dtype[ttype]
+
+    # get quantization situation
+    quant = ggml_is_quantized(ttype)
+    dtype = np.float32 if quant else ttype_to_dtype[ttype]
 
     # create numpy array
     array = np.empty(shape, dtype=dtype)
-    dst = array.ctypes.data
-    size = array.nbytes
 
-    # copy data
-    ctypes.memmove(dst, src, size)
+    # get copy params
+    src = tensor.contents.data
+    dst = array.ctypes.data
+
+    # copy in correct manner
+    if quant:
+        src_p = ctypes.cast(src, ctypes.c_void_p)
+        dst_p = ctypes.cast(dst, ctypes.POINTER(ctypes.c_float))
+        size = ggml_nelements(tensor)
+        traits = ggml_internal_get_type_traits(ttype)
+        traits.to_float(src_p, dst_p, size)
+    else:
+        ctypes.memmove(dst, src, array.nbytes)
 
     # return array
     return array
@@ -281,6 +292,7 @@ def test_compute(input_dim=256, output_dim=32, batch_size=16, qtype=T.F32):
     # get rms and abs proportional errors
     rmse = np.sqrt(np.square(y_np-y0_np).mean()) / np.abs(y0_np).mean()
     abse = np.abs(y_np-y0_np).mean() / np.abs(y0_np).mean()
+    print(match, rmse, abse)
 
     # return result
-    return match, rmse.item(), abse.item()
+    return model
