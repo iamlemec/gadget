@@ -535,6 +535,12 @@ def ggml_nelements(tensor): ...
 def ggml_is_quantized(tensor): ...
 
 @ctypes_function(_ggml,
+    [ggml_tensor_p],
+    ctypes.c_bool
+)
+def ggml_is_transposed(tensor): ...
+
+@ctypes_function(_ggml,
     [ctypes.c_int],
     ggml_type_traits
 )

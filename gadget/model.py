@@ -100,10 +100,8 @@ def test_linear(input_dim=64, output_dim=32, batch_size=16):
 
         def forward(self):
             # get contexts and inputs
-            ctx, x, a, b = (
-                self.ctx_graph, self.tensors['x'], 
-                self.tensors['a'], self.tensors['b']
-            )
+            ctx = self.ctx_graph
+            a, b, x = self.tensors['a', 'b', 'x']
 
             # apply function
             x1 = ggml_mul_mat(ctx, a, x, name=f'x1')
@@ -148,9 +146,8 @@ def test_getrows(output_dim=32, vocab_size=1024, batch_size=16):
 
         def forward(self):
             # get contexts and inputs
-            ctx, x, m = (
-                self.ctx_graph, self.tensors['x'],  self.tensors['m']
-            )
+            ctx = self.ctx_graph
+            m, x = self.tensors['m', 'x']
 
             # apply function
             x1 = ggml_get_rows(ctx, m, x, name=f'x1')

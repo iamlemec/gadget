@@ -6,8 +6,7 @@ import numpy as np
 
 from .utils import AttrDict
 from .ggml import (
-    GGMLQuantizationType,
-    GGML_QUANT_SIZES,
+    GGMLQuantizationType as T,
     ggml_tensor_overhead,
     ggml_graph_overhead,
     ggml_init_params,
@@ -37,7 +36,6 @@ from .ggml import (
 )
 from .libs.general import malloc, free
 from .tensor import (
-    ttype_to_ctype,
     ttype_to_dtype,
     get_tensor_shape,
     get_tensor_type,
@@ -65,6 +63,8 @@ def array_to_tensor(array, tensor):
     will_quantize = quant and array.dtype == np.float32
 
     # check type match
+    if quant and not (is_quantized or will_quantize):
+        raise ValueError(f'for quantized tensors, inputs must be either pre-quantized uint8 or ready-to-quantize float32')
     if not will_quantize and dtype != array.dtype:
         raise ValueError(f'array dtype ({array.dtype}) does not match expected dtype ({dtype})')
 
@@ -237,7 +237,7 @@ class GgmlCompute:
 ## testing
 ##
 
-def test_compute(input_dim=64, output_dim=32, batch_size=16):
+def test_compute(input_dim=256, output_dim=32, batch_size=16, qtype=T.F32):
     from .ggml import ggml_mul_mat, ggml_add
 
     # model parameters
@@ -247,9 +247,9 @@ def test_compute(input_dim=64, output_dim=32, batch_size=16):
 
     # tensor specifications
     tensors = dict(
-        a = (GGMLQuantizationType.F32, (output_dim, input_dim)),
-        b = (GGMLQuantizationType.F32, (output_dim,)),
-        x = (GGMLQuantizationType.F32, (batch_size, input_dim)),
+        a = (qtype, (output_dim, input_dim)),
+        b = (T.F32, (output_dim,)),
+        x = (T.F32, (batch_size, input_dim)),
     )
 
     # define model function
@@ -264,50 +264,8 @@ def test_compute(input_dim=64, output_dim=32, batch_size=16):
     model = GgmlCompute(params, tensors, test_model)
 
     # set weights
-    a_np = np.random.randn(output_dim, input_dim).astype(np.float32)
-    b_np = np.random.randn(output_dim).astype(np.float32)
-    model.set_input('a', a_np)
-    model.set_input('b', b_np)
-
-    # compute on input data
-    x_np = np.random.randn(batch_size, input_dim).astype(np.float32)
-    y_np = model(x=x_np)
-
-    # get numpy results
-    y0_np = (x_np @ a_np.T) + b_np[None,:]
-    match = np.allclose(y_np, y0_np, atol=1e-5)
-
-    # return result
-    return match
-
-def test_quant(input_dim=64, output_dim=32, batch_size=16):
-    from .ggml import ggml_mul_mat, ggml_add
-
-    # model parameters
-    params = dict(
-        input_dim=input_dim, output_dim=output_dim, batch_size=batch_size
-    )
-
-    # tensor specifications
-    tensors = dict(
-        a = (GGMLQuantizationType.Q8_0, (output_dim, input_dim)),
-        b = (GGMLQuantizationType.F32, (output_dim,)),
-        x = (GGMLQuantizationType.F32, (batch_size, input_dim)),
-    )
-
-    # define model function
-    def test_model(ctx, par, ten):
-        n, m = par['input_dim'], par['output_dim']
-        a, b, x = ten['a'], ten['b'], ten['x']
-        x1 = ggml_mul_mat(ctx, a, x, name=f'x1')
-        x2 = ggml_add(ctx, x1, b, name=f'x2')
-        return x2
-
-    # create model graph
-    model = GgmlCompute(params, tensors, test_model)
-
-    # set weights
-    a_np = np.random.randn(output_dim, input_dim).astype(np.float32)
+    a_dtype = np.float16 if qtype == T.F16 else np.float32
+    a_np = np.random.randn(output_dim, input_dim).astype(a_dtype)
     b_np = np.random.randn(output_dim).astype(np.float32)
     model.set_input('a', a_np)
     model.set_input('b', b_np)
@@ -325,4 +283,4 @@ def test_quant(input_dim=64, output_dim=32, batch_size=16):
     abse = np.abs(y_np-y0_np).mean() / np.abs(y0_np).mean()
 
     # return result
-    return match, rmse, abse
+    return match, rmse.item(), abse.item()

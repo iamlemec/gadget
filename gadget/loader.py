@@ -6,8 +6,9 @@ from operator import itemgetter
 
 from .libs.constants import (
     GGUF_MAGIC, GGUF_VERSION, GGUF_DEFAULT_ALIGNMENT,
-    GGUFValueType, GGMLQuantizationType, GGML_QUANT_SIZES
+    GGUFValueType, GGMLQuantizationType
 )
+from .tensor import get_type_traits
 
 # map for scalar types (invertible)
 gtype_to_type = {
@@ -176,7 +177,7 @@ class GgufFile:
             shape = tuple(map(int, gshape.tolist()[::-1]))
 
             # adjust shape for quant type block_size and dtype
-            block_size, type_size = GGML_QUANT_SIZES[ttype]
+            block_size, type_size = get_type_traits(ttype)
             dtype_size = np.dtype(dtype).itemsize
             dshape = tuple(
                 (s // block_size) * (type_size // dtype_size) if i == dims - 1 else s

@@ -5,52 +5,21 @@ import numpy as np
 
 from .ggml import (
     GGMLQuantizationType,
-    GGML_QUANT_SIZES,
     ggml_set_name,
     ggml_new_tensor_1d,
     ggml_new_tensor_2d,
     ggml_new_tensor_3d,
     ggml_new_tensor_4d,
+    ggml_internal_get_type_traits,
 )
 
 ##
 ## type conversion
 ##
 
-ttype_to_ctype = {
-    GGMLQuantizationType.F32: ctypes.c_float,
-    # GGMLQuantizationType.F16: ctypes.c_half, # not supported by ctypes
-    GGMLQuantizationType.Q4_0: ctypes.c_uint8,
-    GGMLQuantizationType.Q4_1: ctypes.c_uint8,
-    GGMLQuantizationType.Q5_0: ctypes.c_uint8,
-    GGMLQuantizationType.Q5_1: ctypes.c_uint8,
-    GGMLQuantizationType.Q8_0: ctypes.c_uint8,
-    GGMLQuantizationType.Q8_1: ctypes.c_uint8,
-    GGMLQuantizationType.Q2_K: ctypes.c_uint8,
-    GGMLQuantizationType.Q3_K: ctypes.c_uint8,
-    GGMLQuantizationType.Q4_K: ctypes.c_uint8,
-    GGMLQuantizationType.Q5_K: ctypes.c_uint8,
-    GGMLQuantizationType.Q6_K: ctypes.c_uint8,
-    GGMLQuantizationType.Q8_K: ctypes.c_uint8,
-    GGMLQuantizationType.IQ2_XXS: ctypes.c_uint8,
-    GGMLQuantizationType.IQ2_XS: ctypes.c_uint8,
-    GGMLQuantizationType.IQ3_XXS: ctypes.c_uint8,
-    GGMLQuantizationType.IQ1_S: ctypes.c_uint8,
-    GGMLQuantizationType.IQ4_NL: ctypes.c_uint8,
-    GGMLQuantizationType.IQ3_S: ctypes.c_uint8,
-    GGMLQuantizationType.IQ2_S: ctypes.c_uint8,
-    GGMLQuantizationType.IQ4_XS: ctypes.c_uint8,
-    GGMLQuantizationType.I8: ctypes.c_int8,
-    GGMLQuantizationType.I16: ctypes.c_int16,
-    GGMLQuantizationType.I32: ctypes.c_int32,
-    GGMLQuantizationType.I64: ctypes.c_int64,
-    GGMLQuantizationType.IQ1_M: ctypes.c_uint8,
-    # GGMLQuantizationType.BF16: ctypes.c_bfloat16, # not supported by ctypes
-}
-
 ttype_to_dtype = {
     GGMLQuantizationType.F32: np.float32,
-    # GGMLQuantizationType.F16: np.float16, # not supported by ctypes
+    GGMLQuantizationType.F16: np.float16,
     GGMLQuantizationType.Q4_0: np.uint8,
     GGMLQuantizationType.Q4_1: np.uint8,
     GGMLQuantizationType.Q5_0: np.uint8,
@@ -90,6 +59,11 @@ def trim_nelem(shape):
     ], default=0)
     return shape[:dims]
 
+def get_type_traits(ttype):
+    traits = ggml_internal_get_type_traits(ttype)
+    return traits.blck_size, traits.type_size
+
+
 def get_tensor_name(tensor):
     value = tensor.contents
     return value.name.decode('utf-8')
@@ -113,7 +87,7 @@ def get_tensor_info(tensor):
 def get_block_shape(tensor):
     ttype = get_tensor_type(tensor)
     shape = get_tensor_shape(tensor)
-    block_size, type_size = GGML_QUANT_SIZES[ttype]
+    block_size, type_size = get_type_traits(ttype)
     dims = len(shape)
     bshape = tuple(
         s // block_size if i == dims - 1 else s for i, s in enumerate(shape)
@@ -125,7 +99,7 @@ def get_data_shape(tensor):
     shape = get_tensor_shape(tensor)
     dtype = ttype_to_dtype[ttype]
     dtype_size = np.dtype(dtype).itemsize
-    block_size, type_size = GGML_QUANT_SIZES[ttype]
+    block_size, type_size = get_type_traits(ttype)
     dims = len(shape)
     dshape = tuple(
         (s // block_size) * (type_size // dtype_size) if i == dims - 1 else s

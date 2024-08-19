@@ -2,7 +2,6 @@ from .libs import _libggml
 
 from .libs.constants import(
     GGMLQuantizationType,
-    GGML_QUANT_SIZES,
     LlamaPoolingType,
 )
 
@@ -38,6 +37,7 @@ from .libs._libggml import (
     ggml_new_tensor_4d,
     ggml_set_name,
     ggml_is_quantized,
+    ggml_is_transposed,
     ggml_nelements,
     ggml_internal_get_type_traits,
     # tensor ops
