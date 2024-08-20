@@ -1,5 +1,6 @@
 # high level embedding interface
 
+import time
 import numpy as np
 from transformers import AutoTokenizer
 
@@ -173,3 +174,25 @@ def test_embed(gguf_path, model_id, prompt='hello world', embed_class=EmbedTorch
     print(simil)
 
     return gg_model
+
+def profile_embed(gguf_path, model_id, prompt=None, length=256, reps=25, embed_class=EmbedTorch, model_class=BertModel, **kwargs):
+    if prompt is None:
+        prompt = ' '.join('a' for _ in range(length-2))
+
+    t0 = time.time()
+    total = reps * length
+
+    gg_model = embed_class(gguf_path, model_id, model_class=model_class, **kwargs)
+
+    t1 = time.time()
+    d1 = t1 - t0
+    print(f'load: {d1}')
+
+    for _ in range(reps):
+        gg_embed = gg_model.embed(prompt)
+
+    t2 = time.time()
+    d2 = t2 - t1
+    print(f'embd: {d2}')
+    print(f'rps : {reps/d2}')
+    print(f'tps : {total/d2}')
