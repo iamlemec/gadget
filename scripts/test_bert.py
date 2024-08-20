@@ -8,9 +8,20 @@ gg_path = '/home/doug/fast/embed'
 hf_model = 'TaylorAI/bge-micro-v2'
 
 # run tests
-print('bge-micro:f32')
+print('CPU:F32:bge-micro')
 test_embed(f'{gg_path}/bge-micro-v2-f32.gguf', hf_model)
-print('bge-micro:q8_0')
+
+print('CPU:Q8_0:bge-micro')
 test_embed(f'{gg_path}/bge-micro-v2-q8_0.gguf', hf_model)
-print('bge-micro:q4_k_m')
+
+print('CPU:Q4_K_M:bge-micro')
 test_embed(f'{gg_path}/bge-micro-v2-q4_k_m.gguf', hf_model)
+
+print('CUDA:F32:bge-micro')
+test_embed(f'{gg_path}/bge-micro-v2-f32.gguf', hf_model, backend='cuda')
+
+print('CUDA:Q8_0:bge-micro')
+test_embed(f'{gg_path}/bge-micro-v2-q8_0.gguf', hf_model, backend='cuda')
+
+print('CUDA:Q4_K_M:bge-micro')
+test_embed(f'{gg_path}/bge-micro-v2-q4_k_m.gguf', hf_model, backend='cuda')

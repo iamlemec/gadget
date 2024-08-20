@@ -278,12 +278,12 @@ def test_torch(input_dim=256, output_dim=32, batch_size=16, qtype=T.F32, backend
 
     # get numpy results
     y0_pt = (x_pt @ a_pt.T.float()) + b_pt[None,:]
-    match = np.allclose(y_pt, y0_pt, atol=1e-5)
+    match = torch.allclose(y_pt, y0_pt, atol=1e-5)
 
     # get rms and abs proportional errors
-    rmse = np.sqrt(np.square(y_pt-y0_pt).mean()) / np.abs(y0_pt).mean()
-    abse = np.abs(y_pt-y0_pt).mean() / np.abs(y0_pt).mean()
-    print(match, rmse, abse)
+    rmse = (y_pt-y0_pt).square().mean().sqrt() / (y0_pt).abs().mean()
+    abse = (y_pt-y0_pt).abs().mean() / (y0_pt).abs().mean()
+    print(match, rmse.item(), abse.item())
 
     # return result
     return model
