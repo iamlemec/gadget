@@ -42,6 +42,7 @@ class EmbedBase:
 
         # do requested pooling
         pooling = self.pooling if pooling is None else pooling
+        seqids = seqids.to(embeds.device) if self.model.framework == 'torch' else seqids
         embeds = self.pool_embeds(pooling, embeds[:total, :], seqids[:total])
 
         # return embeddings
@@ -144,13 +145,17 @@ class EmbedTorch(EmbedBase):
 ## test
 ##
 
-def test_embed(gguf_path, model_id, prompt='hello world', model_class=BertModel, **kwargs):
+def test_embed(gguf_path, model_id, prompt='hello world', embed_class=EmbedTorch, model_class=BertModel, **kwargs):
     import torch
     from transformers import AutoModel
 
     # embed with gg model
-    gg_model = EmbedTorch(gguf_path, model_id, model_class=model_class, **kwargs)
+    gg_model = embed_class(gguf_path, model_id, model_class=model_class, **kwargs)
     gg_embed = gg_model.embed(prompt)
+
+    # bring to host numpy if needed
+    if hasattr(gg_embed, 'numpy'):
+        gg_embed = gg_embed.cpu().numpy()
 
     # embed with hf
     hf_toker = AutoTokenizer.from_pretrained(model_id)
@@ -161,9 +166,10 @@ def test_embed(gguf_path, model_id, prompt='hello world', model_class=BertModel,
         hf_state = hf_model(hf_input).last_hidden_state[0]
     hf_poold = EmbedTorch.pool_embeds(gg_model.pooling, hf_state, hf_seqid)
     hf_embed = hf_poold / hf_poold.norm(dim=-1, keepdim=True)
+    hf_embed = hf_embed.cpu().numpy()
 
     # embed with ggml
-    simil = (hf_embed * gg_embed).sum().item()
+    simil = (hf_embed * gg_embed).sum()
     print(simil)
 
     return gg_model

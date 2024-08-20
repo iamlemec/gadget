@@ -96,7 +96,7 @@ class GgmlModel(GgmlCompute):
 ## testing
 ##
 
-def test_linear(input_dim=64, output_dim=32, batch_size=16):
+def test_linear(input_dim=64, output_dim=32, batch_size=16, **kwargs):
     from .ggml import ggml_mul_mat, ggml_add
 
     # simple model interface
@@ -129,11 +129,15 @@ def test_linear(input_dim=64, output_dim=32, batch_size=16):
     gguf.set_tensor('b', b_np)
 
     # load gguf as model
-    model = TestModel.from_gguf(gguf, batch_size=batch_size)
+    model = TestModel.from_gguf(gguf, batch_size=batch_size, **kwargs)
 
     # compute on input data
     x_np = np.random.randn(batch_size, input_dim).astype(np.float32)
     y_np = model(x=x_np)
+
+    # bring to host numpy if needed
+    if hasattr(y_np, 'numpy'):
+        y_np = y_np.cpu().numpy()
 
     # get numpy results
     y0_np = (x_np @ a_np.T) + b_np[None,:]
@@ -143,7 +147,7 @@ def test_linear(input_dim=64, output_dim=32, batch_size=16):
     # return result
     return model
 
-def test_getrows(output_dim=32, vocab_size=1024, batch_size=16):
+def test_getrows(output_dim=32, vocab_size=1024, batch_size=16, **kwargs):
     from .ggml import ggml_get_rows
 
     # simple model interface
@@ -173,11 +177,15 @@ def test_getrows(output_dim=32, vocab_size=1024, batch_size=16):
     gguf.set_tensor('m', m_np)
 
     # load gguf as model
-    model = TestModel.from_gguf(gguf, batch_size=batch_size)
+    model = TestModel.from_gguf(gguf, batch_size=batch_size, **kwargs)
 
     # compute on input data
     x_np = np.random.randint(0, vocab_size, size=(batch_size,), dtype=np.int32)
     y_np = model(x=x_np)
+
+    # bring to host numpy if needed
+    if hasattr(y_np, 'numpy'):
+        y_np = y_np.cpu().numpy()
 
     # get numpy results
     y0_np = m_np.take(x_np, axis=0)

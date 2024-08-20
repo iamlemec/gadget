@@ -189,7 +189,7 @@ class GgmlCompute:
 ## testing
 ##
 
-def test_compute(input_dim=256, output_dim=32, batch_size=16, qtype=T.F32, **kwargs):
+def test_numpy(input_dim=256, output_dim=32, batch_size=16, qtype=T.F32):
     from .ggml import ggml_mul_mat, ggml_add
 
     # model parameters
@@ -213,7 +213,7 @@ def test_compute(input_dim=256, output_dim=32, batch_size=16, qtype=T.F32, **kwa
         return x2
 
     # create model graph
-    model = GgmlCompute(params, tensors, test_model, **kwargs)
+    model = GgmlCompute(params, tensors, test_model)
 
     # set weights
     a_dtype = np.float16 if qtype == T.F16 else np.float32
@@ -226,10 +226,6 @@ def test_compute(input_dim=256, output_dim=32, batch_size=16, qtype=T.F32, **kwa
     x_np = np.random.randn(batch_size, input_dim).astype(np.float32)
     y_np = model(x=x_np)
 
-    # bring to host numpy if needed
-    if hasattr(y_np, 'numpy'):
-        y_np = y_np.cpu().numpy()
-
     # get numpy results
     y0_np = (x_np @ a_np.T) + b_np[None,:]
     match = np.allclose(y_np, y0_np, atol=1e-5)
@@ -237,6 +233,56 @@ def test_compute(input_dim=256, output_dim=32, batch_size=16, qtype=T.F32, **kwa
     # get rms and abs proportional errors
     rmse = np.sqrt(np.square(y_np-y0_np).mean()) / np.abs(y0_np).mean()
     abse = np.abs(y_np-y0_np).mean() / np.abs(y0_np).mean()
+    print(match, rmse, abse)
+
+    # return result
+    return model
+
+def test_torch(input_dim=256, output_dim=32, batch_size=16, qtype=T.F32, backend='cpu'):
+    import torch
+    from .ggml import ggml_mul_mat, ggml_add
+
+    # model parameters
+    params = dict(
+        input_dim=input_dim, output_dim=output_dim, batch_size=batch_size
+    )
+
+    # tensor specifications
+    tensors = dict(
+        a = (qtype, (output_dim, input_dim)),
+        b = (T.F32, (output_dim,)),
+        x = (T.F32, (batch_size, input_dim)),
+    )
+
+    # define model function
+    def test_model(ctx, par, ten):
+        n, m = par['input_dim'], par['output_dim']
+        a, b, x = ten['a'], ten['b'], ten['x']
+        x1 = ggml_mul_mat(ctx, a, x, name=f'x1')
+        x2 = ggml_add(ctx, x1, b, name=f'x2')
+        return x2
+
+    # create model graph
+    model = GgmlCompute(params, tensors, test_model, backend=backend, framework='torch')
+
+    # set weights
+    a_dtype = torch.float16 if qtype == T.F16 else torch.float32
+    a_pt = torch.randn(output_dim, input_dim).to(device=backend, dtype=a_dtype)
+    b_pt = torch.randn(output_dim).to(device=backend, dtype=torch.float32)
+    model.set_input('a', a_pt)
+    model.set_input('b', b_pt)
+
+    # compute on input data
+    x_pt = torch.randn(batch_size, input_dim).to(device=backend, dtype=torch.float32)
+    y_pt = model(x=x_pt)
+
+    # get numpy results
+    y0_pt = (x_pt @ a_pt.T.float()) + b_pt[None,:]
+    match = np.allclose(y_pt, y0_pt, atol=1e-5)
+
+    # get rms and abs proportional errors
+    rmse = np.sqrt(np.square(y_pt-y0_pt).mean()) / np.abs(y0_pt).mean()
+    abse = np.abs(y_pt-y0_pt).mean() / np.abs(y0_pt).mean()
     print(match, rmse, abse)
 
     # return result
