@@ -1,7 +1,6 @@
 # higher level ggml interface
 
 import re
-import math
 import ctypes
 import numpy as np
 
@@ -14,14 +13,6 @@ from .ggml import (
     ggml_init_params,
     ggml_init,
     ggml_free,
-    ggml_new_tensor_1d,
-    ggml_new_tensor_2d,
-    ggml_new_tensor_3d,
-    ggml_new_tensor_4d,
-    ggml_set_name,
-    ggml_nelements,
-    ggml_is_quantized,
-    ggml_internal_get_type_traits,
     ggml_new_graph,
     ggml_build_forward_expand,
     ggml_backend_cpu_init,
@@ -31,116 +22,18 @@ from .ggml import (
     ggml_backend_get_default_buffer_type,
     ggml_backend_cpu_set_n_threads,
     ggml_backend_graph_compute,
-    ggml_backend_tensor_set,
-    ggml_backend_tensor_get,
-    ggml_backend_tensor_set_async,
-    ggml_backend_tensor_get_async,
     ggml_gallocr_new,
     ggml_gallocr_reserve,
     ggml_gallocr_alloc_graph,
-    ggml_gallocr_get_buffer_size,
 )
-from .libs.general import malloc, free
 from .tensor import (
-    is_half,
-    ttype_to_ntype,
-    get_array_ntype,
-    get_array_data,
-    get_tensor_shape,
-    get_tensor_type,
+    get_framework,
     get_tensor_name,
     get_tensor_info,
-    get_tensor_is_host,
-    get_data_shape,
-    create_array,
     create_tensor,
+    array_to_tensor,
+    tensor_to_array,
 )
-
-##
-## tensor-array serialization
-##
-
-# this assumes the data is contiguous
-# will implicity squeeze unit dimensions
-def array_to_tensor(array, tensor):
-    # get array type and shape (numpy or torch)
-    atype = get_array_ntype(array)
-    ashape = array.shape
-
-    # get tensor type and shape
-    host = get_tensor_is_host(tensor)
-    ttype = get_tensor_type(tensor)
-    ntype = ttype_to_ntype[ttype]
-    shape = get_tensor_shape(tensor)
-    dshape = get_data_shape(tensor)
-
-    # get quantization situation
-    quant = ggml_is_quantized(ttype)
-    halve = is_half(ttype)
-    is_quantized = quant and atype == 'uint8'
-    will_quantize = quant and atype == 'float32'
-    will_halve = halve and atype == 'float32'
-
-    # check device compat
-    if not host and (will_quantize or will_halve):
-        raise ValueError('cannot do on-the-fly type conversion for non-cpu backends')
-
-    # check type match
-    if quant and not (is_quantized or will_quantize):
-        raise ValueError(f'for quantized tensors, inputs must be either pre-quantized uint8 or ready-to-quantize float32')
-    if not (will_quantize or will_halve) and ntype != atype:
-        raise ValueError(f'array dtype ({atype}) does not match expected dtype ({ntype})')
-
-    # check shape match
-    if is_quantized and ashape != dshape:
-        raise ValueError(f'input shape {array.shape} does not match target (quantized) shape {dshape}')
-    if not is_quantized and ashape != shape:
-        raise ValueError(f'input shape {array.shape} does not match target shape {shape}')
-
-    # get data pointers
-    src = get_array_data(array)
-    dst = tensor.contents.data
-
-    # do quant conversion if needed
-    if will_quantize or will_halve:
-        src_p = ctypes.cast(src, ctypes.POINTER(ctypes.c_float))
-        dst_p = ctypes.cast(dst, ctypes.c_void_p)
-        size = ggml_nelements(tensor)
-        traits = ggml_internal_get_type_traits(ttype)
-        traits.from_float(src_p, dst_p, size)
-    else:
-        src_p = ctypes.cast(src, ctypes.c_void_p)
-        ggml_backend_tensor_set(tensor, src_p, 0, array.nbytes)
-
-# this makes a new array and copies
-# we want to avoid deallocating ggml buffers
-def tensor_to_array(tensor, framework='numpy', device='cpu'):
-    # get type and shape
-    ttype = get_tensor_type(tensor)
-    shape = get_tensor_shape(tensor)
-    quant = ggml_is_quantized(ttype)
-
-    # create numpy array
-    ntype = 'float32' if quant else ttype_to_ntype[ttype]
-    array = create_array(ntype, shape, framework=framework, device=device)
-
-    # get copy params
-    src = tensor.contents.data
-    dst = get_array_data(array)
-
-    # copy in correct manner
-    if quant:
-        src_p = ctypes.cast(src, ctypes.c_void_p)
-        dst_p = ctypes.cast(dst, ctypes.POINTER(ctypes.c_float))
-        size = ggml_nelements(tensor)
-        traits = ggml_internal_get_type_traits(ttype)
-        traits.to_float(src_p, dst_p, size)
-    else:
-        dst_p = ctypes.cast(dst, ctypes.c_void_p)
-        ggml_backend_tensor_get(tensor, dst_p, 0, array.nbytes)
-
-    # return array
-    return array
 
 ##
 ## compute interface

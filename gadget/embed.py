@@ -4,7 +4,6 @@ import numpy as np
 from transformers import AutoTokenizer
 
 from .ggml import LlamaPoolingType
-from .tensor import get_framework
 from .bert import BertModel
 
 ##
