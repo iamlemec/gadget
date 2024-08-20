@@ -4,55 +4,14 @@ import numpy as np
 from transformers import AutoTokenizer
 
 from .ggml import LlamaPoolingType
+from .tensor import get_framework
 from .bert import BertModel
-
-##
-## utils
-##
-
-def pad_concat(arrs, length, dtype, fill):
-    full = np.full((length,), fill, dtype=dtype)
-    pos = 0
-    for arr in arrs:
-        num = len(arr)
-        full[pos:pos+num] = arr
-        pos += num
-    return full
-
-# only need causal for now
-def attention_matrix(seqids, null_id=-1):
-    mask = seqids[:, None] == seqids[None, :]
-    logits = np.where(mask, 0.0, -np.inf)
-    return logits
-
-def l2_normalize(values, axis=-1):
-    return values / np.linalg.norm(values, axis=axis, keepdims=True)
-
-# this assumes that sequences are packed in order
-def pool_embeds(pooling, embeds, seqids):
-    if pooling == LlamaPoolingType.NONE:
-        pooled = embeds
-    elif pooling == LlamaPoolingType.MEAN:
-        uids, ntoks = np.unique(seqids, return_counts=True)
-        weights = (uids[:, None] == seqids[None, :]).astype(np.float32)
-        weights /= ntoks[:, None]
-        pooled = weights @ embeds
-    elif pooling == LlamaPoolingType.CLS:
-        _, first = np.unique(seqids, return_index=True)
-        pooled = embeds[first, :]
-    elif pooling == LlamaPoolingType.LAST:
-        _, rlast = np.unique(seqids[::-1], return_index=True)
-        last = len(seqids) - rlast - 1
-        pooled = embeds[last, :]
-    else:
-        raise ValueError('must specify pooling type')
-    return pooled
 
 ##
 ## embed
 ##
 
-class EmbedModel:
+class EmbedBase:
     def __init__(self, gguf_path, model_id, pooling=None, model_class=BertModel, **kwargs):
         self.toker = AutoTokenizer.from_pretrained(model_id)
         self.model = model_class.from_path(gguf_path, **kwargs)
@@ -60,60 +19,127 @@ class EmbedModel:
 
         # assign pooling type
         if pooling is None:
-            pooling = self.model.params.get('bert.pooling_type', LlamaPoolingType.NONE.value)
-        self.pooling = pooling
+            pooling = self.model.params.get('bert.pooling_type', LlamaPoolingType.NONE)
 
-    def encode(self, tokens, sequences=None, positions=None):
-        # get input length
-        n_tokens = len(tokens)
+        self.pooling = LlamaPoolingType(pooling)
 
-        # handle single sequence case
-        if sequences is None:
-            sequences = np.zeros(n_tokens, dtype=np.int32)
-        if positions is None:
-            positions = np.arange(self.batch_size, dtype=np.int32)
-
-        # ensure ndarray inputs
-        tokens = np.asarray(tokens, dtype=np.int32)
-        sequences = np.asarray(sequences, dtype=np.int32)
-        positions = np.asarray(positions, dtype=np.int32)
-
-        # set up attention matrix and compute
-        attention = attention_matrix(sequences).astype(np.float32)
-        embed = self.model(tokens=tokens, positions=positions, attention=attention)
-
-        # return embeddings
-        return embed
-
-    def embed(self, texts, pooling=None, normalize=True):
-        # handle singleton case
+    def tokenize(self, texts):
         if type(texts) is str:
             texts = [texts]
+        return self.toker(texts)['input_ids']
 
+    def embed(self, texts, pooling=None, normalize=True):
         # get tokens as list of lists
-        tokens = self.toker(texts)['input_ids']
-        ntoks = [len(ts) for ts in tokens]
+        tokens = self.tokenize(texts)
+        total = sum([len(t) for t in tokens])
 
         # check for batch fit
-        if (total := sum(ntoks)) > (batch_size := self.batch_size):
-            raise ValueError(f'Number of tokens ({total}) > batch_size ({batch_size})')
+        if total > self.batch_size:
+            raise ValueError(f'Number of tokens ({total}) > batch_size ({self.batch_size})')
 
-        # make numpy inputs for model
-        tokens = pad_concat(tokens, batch_size, np.int32, 0)
-        posits = pad_concat([range(n) for n in ntoks], batch_size, np.int32, 0)
-        seqids = pad_concat([n * [i] for i, n in enumerate(ntoks)], batch_size, np.int32, -1)
-
-        # call model encoder
-        embeds = self.encode(tokens, positions=posits, sequences=seqids)
+        # create input arrays and compute
+        tokids, posids, seqids, attention = self.prepare_inputs(tokens)
+        embeds = self.model(tokens=tokids, positions=posids, attention=attention)
 
         # do requested pooling
         pooling = self.pooling if pooling is None else pooling
-        embeds = pool_embeds(pooling, embeds[:total,:], seqids[:total])
+        embeds = self.pool_embeds(pooling, embeds[:total, :], seqids[:total])
 
         # return embeddings
         if normalize:
-            embeds = l2_normalize(embeds)
+            embeds = self.norm_embeds(embeds)
         return embeds
+
+class EmbedNumpy(EmbedBase):
+    def __init__(self, *args, **kwargs):
+        return super().__init__(*args, framework='numpy', **kwargs)
+
+    @staticmethod
+    def norm_embeds(embeds):
+        return embeds / np.linalg.norm(embeds, axis=-1, keepdims=True)
+
+    # this assumes that sequences are packed in order
+    @staticmethod
+    def pool_embeds(pooling, embeds, seqids):
+        if pooling == LlamaPoolingType.NONE:
+            _, first = np.unique(seqids, return_index=True)
+            pooled = np.split(embeds, first)
+        elif pooling == LlamaPoolingType.MEAN:
+            uids, ntoks = np.unique(seqids, return_counts=True)
+            weights = (uids[:, None] == seqids[None, :]).astype(np.float32)
+            weights /= ntoks[:, None]
+            pooled = weights @ embeds
+        elif pooling == LlamaPoolingType.CLS:
+            _, first = np.unique(seqids, return_index=True)
+            pooled = embeds[first, :]
+        elif pooling == LlamaPoolingType.LAST:
+            _, rlast = np.unique(seqids[::-1], return_index=True)
+            last = len(seqids) - rlast - 1
+            pooled = embeds[last, :]
+        else:
+            raise ValueError('must specify pooling type')
+        return pooled
+
+    def prepare_inputs(self, tokens):
+        ntoks = np.array([len(ts) for ts in tokens], dtype=np.int32)
+        nseqs, total = len(tokens), ntoks.sum()
+        padding = np.zeros(self.batch_size - total, dtype=np.int32)
+        tokens = np.concatenate([*(np.array(t, dtype=np.int32) for t in tokens), padding])
+        posits = np.concatenate([*(np.arange(n, dtype=np.int32) for n in ntoks), padding])
+        seqids = np.concatenate([np.repeat(np.arange(nseqs, dtype=np.int32), ntoks), padding - 1])
+        attention = np.where(seqids[:, None] == seqids[None, :], 0.0, -np.inf).astype(np.float32)
+        return tokens, posits, seqids, attention
+
+class EmbedTorch(EmbedBase):
+    def __init__(self, *args, **kwargs):
+        return super().__init__(*args, framework='torch', **kwargs)
+
+    @staticmethod
+    def norm_embeds(embeds):
+        return embeds / embeds.norm(dim=-1, keepdim=True)
+
+    # this assumes ordered and contiguous seqids
+    @staticmethod
+    def first_indices(values):
+        import torch
+        uvals, counts = values.unique(return_counts=True)
+        indices = torch.empty(len(uvals), dtype=torch.int32)
+        indices[0], indices[1:] = 0, counts.cumsum(0)[:-1]
+        return indices
+
+    # this assumes that sequences are packed in order
+    @classmethod
+    def pool_embeds(cls, pooling, embeds, seqids):
+        import torch
+        if pooling == LlamaPoolingType.NONE:
+            first = cls.first_indices(seqids)
+            pooled = torch.split(embeds, first, 0)
+        elif pooling == LlamaPoolingType.MEAN:
+            uids, ntoks = torch.unique(seqids, return_counts=True)
+            weights = (uids[:, None] == seqids[None, :]).float()
+            weights /= ntoks[:, None]
+            pooled = weights @ embeds
+        elif pooling == LlamaPoolingType.CLS:
+            first = cls.first_indices(seqids)
+            pooled = embeds[first, :]
+        elif pooling == LlamaPoolingType.LAST:
+            rlast = cls.first_indices(seqids[::-1])
+            last = len(seqids) - rlast - 1
+            pooled = embeds[last, :]
+        else:
+            raise ValueError('must specify pooling type')
+        return pooled
+
+    def prepare_inputs(self, tokens):
+        import torch
+        ntoks = torch.tensor([len(ts) for ts in tokens], dtype=torch.int32)
+        nseqs, total = len(tokens), ntoks.sum()
+        padding = torch.zeros(self.batch_size - total, dtype=torch.int32)
+        tokens = torch.cat([*(torch.tensor(t, dtype=torch.int32) for t in tokens), padding])
+        posits = torch.cat([*(torch.arange(n, dtype=torch.int32) for n in ntoks), padding])
+        seqids = torch.cat([torch.repeat_interleave(torch.arange(nseqs, dtype=torch.int32), ntoks), padding - 1])
+        attention = torch.where(seqids[:, None] == seqids[None, :], 0.0, -torch.inf).float()
+        return tokens, posits, seqids, attention
 
 ##
 ## test
@@ -123,23 +149,22 @@ def test_embed(gguf_path, model_id, prompt='hello world', model_class=BertModel,
     import torch
     from transformers import AutoModel
 
-    # load hf model
-    hf_toker = AutoTokenizer.from_pretrained(model_id)
-    hf_model = AutoModel.from_pretrained(model_id)
-
-    # load gg model
-    gg_model = EmbedModel(gguf_path, model_id, model_class=model_class, **kwargs)
+    # embed with gg model
+    gg_model = EmbedTorch(gguf_path, model_id, model_class=model_class, **kwargs)
+    gg_embed = gg_model.embed(prompt)
 
     # embed with hf
+    hf_toker = AutoTokenizer.from_pretrained(model_id)
+    hf_model = AutoModel.from_pretrained(model_id)
     hf_input = hf_toker(prompt, return_tensors='pt')['input_ids']
-    hf_seqid = torch.zeros_like(hf_input).numpy()
-    hf_state = hf_model(hf_input).last_hidden_state[0].detach().numpy()
-    hf_poold = pool_embeds(gg_model.pooling, hf_state, hf_seqid)
-    hf_embed = l2_normalize(hf_poold)
+    hf_seqid = torch.zeros_like(hf_input)
+    with torch.no_grad():
+        hf_state = hf_model(hf_input).last_hidden_state[0]
+    hf_poold = EmbedTorch.pool_embeds(gg_model.pooling, hf_state, hf_seqid)
+    hf_embed = hf_poold / hf_poold.norm(dim=-1, keepdim=True)
 
     # embed with ggml
-    gg_embed = gg_model.embed(prompt)
-    simil = (hf_embed * gg_embed).sum()
+    simil = (hf_embed * gg_embed).sum().item()
     print(simil)
 
     return gg_model

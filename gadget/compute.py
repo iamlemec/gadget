@@ -114,14 +114,14 @@ def array_to_tensor(array, tensor):
 
 # this makes a new array and copies
 # we want to avoid deallocating ggml buffers
-def tensor_to_array(tensor, framework='numpy', device='cpu', float32=False):
+def tensor_to_array(tensor, framework='numpy', device='cpu'):
     # get type and shape
     ttype = get_tensor_type(tensor)
     shape = get_tensor_shape(tensor)
     quant = ggml_is_quantized(ttype)
 
     # create numpy array
-    ntype = 'float32' if (quant or float32) else ttype_to_ntype[ttype]
+    ntype = 'float32' if quant else ttype_to_ntype[ttype]
     array = create_array(ntype, shape, framework=framework, device=device)
 
     # get copy params
@@ -129,7 +129,7 @@ def tensor_to_array(tensor, framework='numpy', device='cpu', float32=False):
     dst = get_array_data(array)
 
     # copy in correct manner
-    if quant or float32:
+    if quant:
         src_p = ctypes.cast(src, ctypes.c_void_p)
         dst_p = ctypes.cast(dst, ctypes.POINTER(ctypes.c_float))
         size = ggml_nelements(tensor)
