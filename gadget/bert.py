@@ -58,7 +58,7 @@ class BertModel(GgmlModel):
         cur = ggml_get_rows(ctx, etok, tokens, name='embed=tok')
         cur = ggml_add_inplace(ctx, cur, ggml_view_1d(ctx, etyp, embed_dim, 0), name='embed=tok+typ')
         cur = ggml_add_inplace(ctx, cur, ggml_get_rows(ctx, epos, positions), name='embed=tok+typ+pos')
-        cur = norm_layer(ctx, cur, tnw, tnb, layer_norm_eps, inplace=True, name='embed_norm')
+        cur = norm_layer(ctx, cur, tnw, tnb, eps=layer_norm_eps, inplace=True, name='embed_norm')
 
         # loop over layers
         for i in range(n_layers):
@@ -76,20 +76,20 @@ class BertModel(GgmlModel):
 
             # get attention interactions
             att = attention_layer(
-                ctx, cur, n_heads, attention, wq, bq, wk, bk, wv, bv, wo, bo,
+                ctx, cur, n_heads, attention, wq, wk, wv, wo, bq=bq, bk=bk, bv=bv, bo=bo,
                 eps=layer_norm_eps, name=f'attn{i}'
             )
 
             # add attention output to current then normalize
             att = ggml_add_inplace(ctx, cur, att)
-            att = norm_layer(ctx, att, wan, ban, layer_norm_eps, inplace=True, name=f'attn{i}_norm')
+            att = norm_layer(ctx, att, wan, ban, eps=layer_norm_eps, inplace=True, name=f'attn{i}_norm')
 
             # feed forward network on current
-            cur = feed_forward_layer(ctx, att, wu, bu, wd, bd, act='gelu', name=f'ffn{i}')
+            cur = feed_forward_layer(ctx, att, wu, wd, bu=bu, bd=bd, act='gelu', name=f'ffn{i}')
 
             # add attention output to current tensor and normalize
             cur = ggml_add_inplace(ctx, cur, att, name=f'add{i}')
-            cur = norm_layer(ctx, cur, wln, bln, layer_norm_eps, inplace=True, name=f'norm{i}')
+            cur = norm_layer(ctx, cur, wln, bln, eps=layer_norm_eps, inplace=True, name=f'norm{i}')
 
         # return embeddings
         return cur

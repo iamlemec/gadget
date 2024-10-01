@@ -103,10 +103,11 @@ class EmbedTorch(EmbedBase):
     @staticmethod
     def first_indices(values):
         import torch
-        uvals, counts = values.unique(return_counts=True)
-        indices = torch.empty(len(uvals), dtype=torch.int32)
-        indices[0], indices[1:] = 0, counts.cumsum(0)[:-1]
-        return indices
+        uvals, indices = values.unique(return_inverse=True)
+        first = torch.empty(len(uvals), dtype=torch.int32)
+        order = torch.arange(len(values), dtype=torch.int32)
+        first.scatter_reduce_(0, indices, order, reduce='amin')
+        return first
 
     # this assumes that sequences are packed in order
     @classmethod
