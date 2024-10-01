@@ -54,14 +54,27 @@ def attention_layer(
 
     # get dimensions
     batch_size, embed_dim = get_tensor_shape(x)
-    if embed_dim % n_heads_q != 0:
-        raise ValueError(f'embed_dim ({embed_dim}) must be divisble by n_heads_q ({n_heads_q})')
-    if embed_dim % n_heads_kv != 0:
-        raise ValueError(f'embed_dim ({embed_dim}) must be divisble by n_heads_kv ({n_heads_kv})')
+    embed_dim_q, _ = get_tensor_shape(wq)
+    embed_dim_k, _ = get_tensor_shape(wk)
+    embed_dim_v, _ = get_tensor_shape(wv)
 
-    # get attention head_dim
-    head_dim = embed_dim // n_heads
-    head_wgt = 1.0/sqrt(head_dim)
+    # kv consistency
+    if embed_dim_v != embed_dim_k:
+        raise ValueError(f'embed_dim_v ({embed_dim_v}) must be equal to embed_dim_k ({embed_dim_k})')
+    embed_dim_kv = embed_dim_k
+
+    # check head divisibility
+    if embed_dim_q % n_heads_q != 0:
+        raise ValueError(f'embed_dim_q ({embed_dim_q}) must be divisble by n_heads_q ({n_heads_q})')
+    if embed_dim_kv % n_heads_kv != 0:
+        raise ValueError(f'embed_dim_kv ({embed_dim_kv}) must be divisble by n_heads_kv ({n_heads_kv})')
+
+    # head dims match
+    head_dim_q = embed_dim_q // n_heads_q
+    head_dim_kv = embed_dim_kv // n_heads_kv
+    if head_dim_q != head_dim_kv:
+        raise ValueError(f'head_dim_q ({head_dim_q}) must be equal to head_dim_kv ({head_dim_kv})')
+    head_dim = head_dim_q
 
     # compute query, key, value
     q = linear_layer(ctx, x, wq, bias=bq, name=f'{name}_q')
@@ -77,11 +90,12 @@ def attention_layer(
     k = ggml_cont(ctx, ggml_permute(ctx, k, 0, 2, 1, 3))
 
     # compute interactions
+    head_wgt = 1.0/sqrt(head_dim)
     kq = ggml_mul_mat(ctx, k, q)
     kq = ggml_soft_max_ext(ctx, kq, mask, head_wgt, alibi)
 
     # pull in values
-    v = ggml_cont(ctx, ggml_transpose(ctx, ggml_reshape_2d(ctx, v, embed_dim, batch_size)))
+    v = ggml_cont(ctx, ggml_transpose(ctx, ggml_reshape_2d(ctx, v, embed_dim_kv, batch_size)))
     kqv = ggml_mul_mat(ctx, ggml_reshape_3d(ctx, v, batch_size, head_dim, n_heads_kv), kq)
 
     # merge dimensions
