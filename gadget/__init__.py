@@ -12,7 +12,9 @@ from .loader import GgufFile
 from .compute import GgmlCompute
 from .model import GgmlModel
 from .bert import BertModel
+from .llama import LlamaModel
 from .embed import EmbedNumpy, EmbedTorch
+from .textgen import TextGen
 
 from .ggml import GGMLQuantizationType as T
 

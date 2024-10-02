@@ -21,7 +21,8 @@ from .model import GgmlModel, Parameter, Tensor
 class LlamaModel(GgmlModel):
     batch_size: Parameter('llama.context_length')
     tokens    : Tensor('I32', ('batch_size',))
-    attention : Tensor('F32', ('batch_size', 'batch_size'))
+    positions : Tensor('I32', ('batch_size',))
+    mask      : Tensor('F32', ('batch_size', 'batch_size'))
 
     # perform param validation here
     def __init__(self, params, tensors, **kwargs):
@@ -46,7 +47,7 @@ class LlamaModel(GgmlModel):
         etok = self.tensors['token_embd.weight']
 
         # get input tensors
-        tokens, attention = self.tensors['tokens', 'attention']
+        tokens, positions, mask = self.tensors['tokens', 'positions', 'mask']
 
         # get token embeddings
         cur = ggml_get_rows(ctx, etok, tokens, name='embed=tok')
@@ -63,9 +64,9 @@ class LlamaModel(GgmlModel):
             ]
 
             # get attention interactions
-            att = norm_layer(ctx, cur, wan, eps=layer_norm_rms_eps, inplace=True, name=f'attn{i}_norm')
+            att = norm_layer(ctx, cur, wan, rms=True, eps=layer_norm_rms_eps, inplace=True, name=f'attn{i}_norm')
             att = attention_layer(
-                ctx, att, n_heads_q, attention, wq, wk, wv, wo,
+                ctx, att, n_heads_q, mask, wq, wk, wv, wo, positions=positions,
                 n_heads_kv=n_heads_kv, eps=layer_norm_rms_eps, name=f'attn{i}'
             )
 
@@ -73,8 +74,8 @@ class LlamaModel(GgmlModel):
             att = ggml_add_inplace(ctx, att, last)
 
             # feed forward network on current
-            cur = norm_layer(ctx, att, wn, eps=layer_norm_rms_eps, name=f'ffn{i}_norm')
-            cur = feed_forward_layer(ctx, cur, wu, wd, act='gelu', name=f'ffn{i}')
+            cur = norm_layer(ctx, att, wn, rms=True, eps=layer_norm_rms_eps, name=f'ffn{i}_norm')
+            cur = feed_forward_layer(ctx, cur, wu, wd, act='silu', name=f'ffn{i}')
 
             # add attention output to current tensor
             cur = ggml_add_inplace(ctx, cur, att)
@@ -83,7 +84,7 @@ class LlamaModel(GgmlModel):
         ow, onw = self.tensors['output.weight', 'output_norm.weight']
 
         # generate output
-        cur = norm_layer(ctx, cur, onw, eps=layer_norm_rms_eps, inplace=True, name='output_norm')
+        cur = norm_layer(ctx, cur, onw, rms=True, eps=layer_norm_rms_eps, inplace=True, name='output_norm')
         cur = linear_layer(ctx, cur, ow, name='output')
 
         # return logits

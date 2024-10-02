@@ -13,6 +13,8 @@ from .ggml import (
     ggml_add,
     ggml_add_inplace,
     ggml_gelu,
+    ggml_silu,
+    ggml_rope,
     ggml_mul_mat,
     ggml_permute,
     ggml_transpose,
@@ -45,7 +47,7 @@ def norm_layer(ctx, x, weight, bias=None, eps=0.0, rms=False, inplace=False, nam
 
 def attention_layer(
     ctx, x, n_heads, mask, wq, wk, wv, wo, bq=None, bk=None, bv=None, bo=None,
-    n_heads_kv=None, eps=0.0, alibi=0.0, name=None
+    n_heads_kv=None, eps=0.0, positions=None, alibi=0.0, name=None
 ):
     # get n_heads_q and n_heads_kv
     n_heads_q = n_heads
@@ -53,10 +55,10 @@ def attention_layer(
         n_heads_kv = n_heads
 
     # get dimensions
-    batch_size, embed_dim = get_tensor_shape(x)
-    embed_dim_q, _ = get_tensor_shape(wq)
-    embed_dim_k, _ = get_tensor_shape(wk)
-    embed_dim_v, _ = get_tensor_shape(wv)
+    embed_dim, batch_size = get_tensor_shape(x)
+    _, embed_dim_q = get_tensor_shape(wq)
+    _, embed_dim_k = get_tensor_shape(wk)
+    _, embed_dim_v = get_tensor_shape(wv)
 
     # kv consistency
     if embed_dim_v != embed_dim_k:
@@ -85,6 +87,11 @@ def attention_layer(
     q = ggml_reshape_3d(ctx, q, head_dim, n_heads_q, batch_size)
     k = ggml_reshape_3d(ctx, k, head_dim, n_heads_kv, batch_size)
 
+    # apply rotary position embeddings
+    if positions is not None:
+        q = ggml_rope(ctx, q, positions, head_dim, 0)
+        k = ggml_rope(ctx, k, positions, head_dim, 0)
+
     # permute dimensions
     q = ggml_permute(ctx, q, 0, 2, 1, 3)
     k = ggml_cont(ctx, ggml_permute(ctx, k, 0, 2, 1, 3))
@@ -95,8 +102,9 @@ def attention_layer(
     kq = ggml_soft_max_ext(ctx, kq, mask, head_wgt, alibi)
 
     # pull in values
-    v = ggml_cont(ctx, ggml_transpose(ctx, ggml_reshape_2d(ctx, v, embed_dim_kv, batch_size)))
-    kqv = ggml_mul_mat(ctx, ggml_reshape_3d(ctx, v, batch_size, head_dim, n_heads_kv), kq)
+    v = ggml_cont(ctx, ggml_transpose(ctx, v))
+    v = ggml_reshape_3d(ctx, v, batch_size, head_dim, n_heads_kv)
+    kqv = ggml_mul_mat(ctx, v, kq)
 
     # merge dimensions
     kqv = ggml_permute(ctx, kqv, 0, 2, 1, 3)
@@ -110,6 +118,7 @@ def attention_layer(
 
 activations = {
     'gelu': ggml_gelu,
+    'silu': ggml_silu,
 }
 
 def feed_forward_layer(ctx, x, wu, wd, bu=None, bd=None, act='gelu', name=None):

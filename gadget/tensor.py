@@ -129,25 +129,29 @@ def get_tensor_is_host(tensor):
     is_host = ggml_backend_buffer_is_host(buffer)
     return is_host
 
-def get_tensor_shape(tensor):
+def get_tensor_shape(tensor, trim=True, numpy=False):
     value = tensor.contents
     nelem = tuple(value.ne[:4])
-    return trim_nelem(nelem)[::-1]
+    if trim:
+        nelem = trim_nelem(nelem)
+    if numpy:
+        nelem = nelem[::-1]
+    return nelem
 
 def get_tensor_type(tensor):
     value = tensor.contents
     return T(value.type)
 
-def get_tensor_info(tensor):
+def get_tensor_info(tensor, numpy=False):
     name = get_tensor_name(tensor)
     ttype = get_tensor_type(tensor)
-    shape = get_tensor_shape(tensor)
+    shape = get_tensor_shape(tensor, numpy=numpy)
     stat = f'{name}: {ttype.name} × {shape}'
     return stat
 
 def get_block_shape(tensor):
     ttype = get_tensor_type(tensor)
-    shape = get_tensor_shape(tensor)
+    shape = get_tensor_shape(tensor, numpy=True)
     block_size, type_size = get_type_traits(ttype)
     dims = len(shape)
     bshape = tuple(
@@ -157,7 +161,7 @@ def get_block_shape(tensor):
 
 def get_data_shape(tensor):
     ttype = get_tensor_type(tensor)
-    shape = get_tensor_shape(tensor)
+    shape = get_tensor_shape(tensor, numpy=True)
     ntype = ttype_to_ntype[ttype]
     ntype_size = ntype_width[ntype]
     block_size, type_size = get_type_traits(ttype)
@@ -207,7 +211,7 @@ def array_to_tensor(array, tensor):
     host = get_tensor_is_host(tensor)
     ttype = get_tensor_type(tensor)
     ntype = ttype_to_ntype[ttype]
-    shape = get_tensor_shape(tensor)
+    shape = get_tensor_shape(tensor, numpy=True)
     dshape = get_data_shape(tensor)
 
     # get quantization situation
@@ -253,7 +257,7 @@ def array_to_tensor(array, tensor):
 def tensor_to_array(tensor, framework='numpy', device='cpu'):
     # get type and shape
     ttype = get_tensor_type(tensor)
-    shape = get_tensor_shape(tensor)
+    shape = get_tensor_shape(tensor, numpy=True)
     quant = ggml_is_quantized(ttype)
 
     # create numpy array
