@@ -7,6 +7,12 @@ from transformers import AutoTokenizer
 from .ggml import LlamaPoolingType
 from .bert import BertModel
 
+# we don't want to require torch for gadget
+try:
+    import torch
+except ImportError:
+    pass
+
 ##
 ## embed
 ##
@@ -102,7 +108,6 @@ class EmbedTorch(EmbedBase):
     # this assumes ordered and contiguous seqids
     @staticmethod
     def first_indices(values):
-        import torch
         uvals, indices = values.unique(return_inverse=True)
         first = torch.empty(len(uvals), dtype=torch.int32)
         order = torch.arange(len(values), dtype=torch.int32)
@@ -112,7 +117,6 @@ class EmbedTorch(EmbedBase):
     # this assumes that sequences are packed in order
     @classmethod
     def pool_embeds(cls, pooling, embeds, seqids):
-        import torch
         if pooling == LlamaPoolingType.NONE:
             first = cls.first_indices(seqids)
             pooled = torch.split(embeds, first, 0)
@@ -133,7 +137,6 @@ class EmbedTorch(EmbedBase):
         return pooled
 
     def prepare_inputs(self, tokens):
-        import torch
         ntoks = torch.tensor([len(ts) for ts in tokens], dtype=torch.int32)
         nseqs, total = len(tokens), ntoks.sum()
         padding = torch.zeros(self.batch_size - total, dtype=torch.int32)
@@ -148,7 +151,6 @@ class EmbedTorch(EmbedBase):
 ##
 
 def test_embed(gguf_path, model_id, prompt='hello world', embed_class=EmbedTorch, model_class=BertModel, **kwargs):
-    import torch
     from transformers import AutoModel
 
     # embed with gg model

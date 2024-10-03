@@ -5,6 +5,7 @@ import numpy as np
 from .ggml import (
     ggml_add_inplace,
     ggml_get_rows,
+    ggml_transpose,
 )
 from .layers import (
     linear_layer,
@@ -38,13 +39,14 @@ class LlamaModel(GgmlModel):
         ctx = self.ctx_graph
 
         # get params
-        n_layers, n_heads_q, n_heads_kv, layer_norm_rms_eps = self.params[
+        n_layers, n_heads_q, n_heads_kv, rope_base, layer_norm_rms_eps = self.params[
             'llama.block_count'            , 'llama.attention.head_count'            ,
-            'llama.attention.head_count_kv', 'llama.attention.layer_norm_rms_epsilon',
+            'llama.attention.head_count_kv', 'llama.rope.freq_base',
+            'llama.attention.layer_norm_rms_epsilon',
         ]
 
         # get embed tensors
-        etok = self.tensors['token_embd.weight']
+        etok, rope_freqs = self.tensors['token_embd.weight', 'rope_freqs.weight']
 
         # get input tensors
         tokens, positions, mask = self.tensors['tokens', 'positions', 'mask']
@@ -64,27 +66,29 @@ class LlamaModel(GgmlModel):
             ]
 
             # get attention interactions
-            att = norm_layer(ctx, cur, wan, rms=True, eps=layer_norm_rms_eps, inplace=True, name=f'attn{i}_norm')
+            att = norm_layer(ctx, cur, wan, rms=True, eps=layer_norm_rms_eps, name=f'attn{i}_norm')
             att = attention_layer(
-                ctx, att, n_heads_q, mask, wq, wk, wv, wo, positions=positions,
-                n_heads_kv=n_heads_kv, eps=layer_norm_rms_eps, name=f'attn{i}'
+                ctx, att, n_heads_q, mask, wq, wk, wv, wo, positions=positions, n_heads_kv=n_heads_kv,
+                rope_freqs=rope_freqs, rope_base=rope_base, eps=layer_norm_rms_eps, name=f'attn{i}'
             )
 
             # add layer input to attention
             att = ggml_add_inplace(ctx, att, last)
 
+
             # feed forward network on current
             cur = norm_layer(ctx, att, wn, rms=True, eps=layer_norm_rms_eps, name=f'ffn{i}_norm')
-            cur = feed_forward_layer(ctx, cur, wu, wd, act='silu', name=f'ffn{i}')
+            cur = feed_forward_layer(ctx, cur, wg, wd, wg=wu, act='silu', name=f'ffn{i}') # notice wg/wu flipped
 
             # add attention output to current tensor
             cur = ggml_add_inplace(ctx, cur, att)
 
         # get output tensors
-        ow, onw = self.tensors['output.weight', 'output_norm.weight']
+        onw = self.tensors['output_norm.weight']
+        ow = self.tensors.get('output.weight', etok)
 
         # generate output
-        cur = norm_layer(ctx, cur, onw, rms=True, eps=layer_norm_rms_eps, inplace=True, name='output_norm')
+        cur = norm_layer(ctx, cur, onw, rms=True, eps=layer_norm_rms_eps, name='output_norm')
         cur = linear_layer(ctx, cur, ow, name='output')
 
         # return logits

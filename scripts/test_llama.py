@@ -1,12 +1,18 @@
 # test llama model
 
 import numpy as np
-from gadget.textgen import test_textgen
+from gadget.textgen import test_textgen, test_huggingface
 
 # configure
-gg_path = '/home/doug/fast/models'
-hf_model = 'meta-llama/Meta-Llama-3-8B'
+gg_path = '/home/doug/fast/models/meta-llama-3.2-1b-f32.gguf'
+hf_model = 'meta-llama/Llama-3.2-1B'
 
 # run tests
-print('CPU:F32:meta-llama/Meta-Llama-3-8B')
-test_textgen(f'{gg_path}/meta-llama-3-8b-f32.gguf', hf_model)
+# print('CPU:F32:meta-llama/Meta-Llama-3-8B')
+# test_textgen(f'{gg_path}/meta-llama-3-8b-f32.gguf', hf_model)
+
+if __name__ == '__main__':
+    gg_output = test_textgen(gg_path, hf_model, batch_size=32)
+    hf_output = test_huggingface(hf_model)
+    print(gg_output)
+    print(hf_output)

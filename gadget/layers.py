@@ -14,7 +14,7 @@ from .ggml import (
     ggml_add_inplace,
     ggml_gelu,
     ggml_silu,
-    ggml_rope,
+    ggml_rope_ext,
     ggml_mul_mat,
     ggml_permute,
     ggml_transpose,
@@ -45,9 +45,18 @@ def norm_layer(ctx, x, weight, bias=None, eps=0.0, rms=False, inplace=False, nam
         x = add_func(ctx, x, bias, name=f'{name}_add')
     return x
 
+def rope_extended(
+    ctx, x, pos, n_dims, freqs=None, mode=0, n_ctx_orig=0, freq_base=10000.0, freq_scale=1.0,
+    ext_factor=0.0, attn_factor=1.0, beta_fast=0.0, beta_slow=0.0, inplace=False
+):
+    return ggml_rope_ext(
+        ctx, x, pos, freqs, n_dims, mode, n_ctx_orig, freq_base, freq_scale,
+        ext_factor, attn_factor, beta_fast, beta_slow, inplace
+    )
+
 def attention_layer(
-    ctx, x, n_heads, mask, wq, wk, wv, wo, bq=None, bk=None, bv=None, bo=None,
-    n_heads_kv=None, eps=0.0, positions=None, alibi=0.0, name=None
+    ctx, x, n_heads, mask, wq, wk, wv, wo, bq=None, bk=None, bv=None, bo=None, n_heads_kv=None,
+    rope_freqs=None, rope_base=None, eps=0.0, positions=None, alibi=0.0, name=None
 ):
     # get n_heads_q and n_heads_kv
     n_heads_q = n_heads
@@ -88,9 +97,9 @@ def attention_layer(
     k = ggml_reshape_3d(ctx, k, head_dim, n_heads_kv, batch_size)
 
     # apply rotary position embeddings
-    if positions is not None:
-        q = ggml_rope(ctx, q, positions, head_dim, 0)
-        k = ggml_rope(ctx, k, positions, head_dim, 0)
+    if rope_base is not None:
+        q = rope_extended(ctx, q, pos=positions, n_dims=head_dim, freqs=rope_freqs, freq_base=rope_base)
+        k = rope_extended(ctx, k, pos=positions, n_dims=head_dim, freqs=rope_freqs, freq_base=rope_base)
 
     # permute dimensions
     q = ggml_permute(ctx, q, 0, 2, 1, 3)
@@ -121,8 +130,13 @@ activations = {
     'silu': ggml_silu,
 }
 
-def feed_forward_layer(ctx, x, wu, wd, bu=None, bd=None, act='gelu', name=None):
-    x = linear_layer(ctx, x, wu, bias=bu, name=f'{name}_up')
-    x = activations[act](ctx, x)
-    x = linear_layer(ctx, x, wd, bias=bd, name=f'{name}_down')
-    return x
+# without gate layer, just a plain feed forward network
+# with gate layer, it's a gated feed forward network
+def feed_forward_layer(ctx, x, wu, wd, wg=None, bu=None, bd=None, bg=None, act='gelu', name=None):
+    y = linear_layer(ctx, x, wu, bias=bu, name=f'{name}_up')
+    y = activations[act](ctx, y)
+    if wg is not None:
+        g = linear_layer(ctx, x, wg, bias=bg, name=f'{name}_gate')
+        y = ggml_mul(ctx, y, g)
+    y = linear_layer(ctx, y, wd, bias=bd, name=f'{name}_down')
+    return y
