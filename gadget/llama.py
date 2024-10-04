@@ -40,8 +40,8 @@ class LlamaModel(GgmlModel):
 
         # get params
         n_layers, n_heads_q, n_heads_kv, rope_base, layer_norm_rms_eps = self.params[
-            'llama.block_count'            , 'llama.attention.head_count'            ,
-            'llama.attention.head_count_kv', 'llama.rope.freq_base',
+            'llama.block_count'            , 'llama.attention.head_count',
+            'llama.attention.head_count_kv', 'llama.rope.freq_base'      ,
             'llama.attention.layer_norm_rms_epsilon',
         ]
 

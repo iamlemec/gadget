@@ -52,11 +52,16 @@ class TextGen:
         probs = probs / torch.sum(probs)
         return torch.multinomial(probs, num_samples=1).item()
 
-    def generate_next(self, tokens, **kwargs):
+    def next_token(self, tokens, **kwargs):
         n_toks = len(tokens)
         tokids, posids, mask = self.prepare_inputs(tokens)
         logits = self.model(tokens=tokids, positions=posids, mask=mask)
         return self.sample(logits[n_toks,:], **kwargs)
+
+    def generate_next(self, text, **kwargs):
+        toks = self.tokenize(text)
+        gen = self.next_token(toks, **kwargs)
+        return self.detokenize(gen)
 
 def test_textgen(gguf_path, model_id, prompt='The capital of France is', model_class=LlamaModel, batch_size=128, **kwargs):
     model = TextGen(gguf_path, model_id, model_class=model_class, batch_size=batch_size, **kwargs)
