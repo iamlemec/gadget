@@ -56,7 +56,7 @@ def rope_extended(
 
 def attention_layer(
     ctx, x, n_heads, mask, wq, wk, wv, wo, bq=None, bk=None, bv=None, bo=None, n_heads_kv=None,
-    rope_freqs=None, rope_base=None, eps=0.0, positions=None, alibi=0.0, name=None
+    rope_freqs=None, rope_base=None, eps=0.0, positions=None, alibi=0.0, kv_cache=None, name=None
 ):
     # get n_heads_q and n_heads_kv
     n_heads_q = n_heads

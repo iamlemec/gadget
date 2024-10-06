@@ -73,10 +73,10 @@ def ggml_can_add(t0, t1):
     ne0 = get_tensor_nelem(t0)
     ne1 = get_tensor_nelem(t1)
     return (
-        (ne1[0] % ne0[0] == 0) and
-        (ne1[1] % ne0[1] == 0) and
-        (ne1[2] % ne0[2] == 0) and
-        (ne1[3] % ne0[3] == 0)
+        (ne0[0] % ne1[0] == 0) and
+        (ne0[1] % ne1[1] == 0) and
+        (ne0[2] % ne1[2] == 0) and
+        (ne0[3] % ne1[3] == 0)
     )
 
 def ggml_can_get_rows(t0, t1):

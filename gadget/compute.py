@@ -46,14 +46,14 @@ class GgmlCompute:
         self.ctx_tensors = None
         self.ctx_graph = None
 
+        # other options
+        self.framework = 'numpy' if framework is None else framework
+
         # create tensors and graph
         self.create_params(params)
         self.create_backend(backend)
         self.create_tensors(tensors)
         self.create_graph(model)
-
-        # other options
-        self.framework = 'numpy' if framework is None else framework
 
     def __del__(self):
         if self.ctx_graph is not None:
@@ -199,9 +199,9 @@ def test_numpy(input_dim=256, output_dim=32, batch_size=16, qtype=T.F32):
 
     # tensor specifications
     tensors = dict(
-        a = (qtype, (output_dim, input_dim)),
+        a = (qtype, (input_dim, output_dim)),
         b = (T.F32, (output_dim,)),
-        x = (T.F32, (batch_size, input_dim)),
+        x = (T.F32, (input_dim, batch_size)),
     )
 
     # define model function
@@ -249,9 +249,9 @@ def test_torch(input_dim=256, output_dim=32, batch_size=16, qtype=T.F32, backend
 
     # tensor specifications
     tensors = dict(
-        a = (qtype, (output_dim, input_dim)),
+        a = (qtype, (input_dim, output_dim)),
         b = (T.F32, (output_dim,)),
-        x = (T.F32, (batch_size, input_dim)),
+        x = (T.F32, (input_dim, batch_size)),
     )
 
     # define model function

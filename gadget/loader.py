@@ -162,7 +162,6 @@ class GgufFile:
             self.fields[name] = value
 
         # read tensor metadata
-        # NOTE: we reverse the shape to match numpy array convention
         metadata = {}
         for _ in range(n_tensors):
             # read in metadata fields
@@ -172,15 +171,15 @@ class GgufFile:
             ttype = GGMLQuantizationType(self.read_uint32())
             offset = self.read_uint64()
 
-            # get array shape and size in numpy form
+            # get array shape and size
             dtype = ttype_to_type[ttype]
-            shape = tuple(map(int, gshape.tolist()[::-1]))
+            shape = tuple(map(int, gshape.tolist()))
 
             # adjust shape for quant type block_size and dtype
             block_size, type_size = get_type_traits(ttype)
             dtype_size = np.dtype(dtype).itemsize
             dshape = tuple(
-                (s // block_size) * (type_size // dtype_size) if i == dims - 1 else s
+                (s // block_size) * (type_size // dtype_size) if i == 0 else s
                 for i, s in enumerate(shape)
             )
 
@@ -196,9 +195,9 @@ class GgufFile:
         # read weights
         for name, (ttype, shape, dtype, dshape, offset) in metadata.items():
             self.offset = tensor_base + offset
-            size = prod(dshape)
-            vals = self.read(dtype, count=size)
-            self.tensors[name] = ttype, shape, vals.reshape(dshape)
+            nsize, nshape = prod(dshape), dshape[::-1]
+            vals = self.read(dtype, count=nsize).reshape(nshape)
+            self.tensors[name] = ttype, shape, vals
 
         # return model
         return self
@@ -276,7 +275,8 @@ class GgufFile:
     def __repr__(self):
         width = max(
             [len(f) for f in self.fields ] +
-            [len(t) for t in self.tensors]
+            [len(t) for t in self.tensors],
+            default=0
         )
         max_length = 8
         lines = ['FIELDS']
@@ -306,7 +306,7 @@ class GgufFile:
             lines.append(line)
         lines += ['', 'TENSORS']
         for key, (ttype, shape, tensor) in self.tensors.items():
-            lines.append(f'{key:{width}} = {ttype.name} × {shape[::-1]}')
+            lines.append(f'{key:{width}} = {ttype.name} × {shape}')
         return '\n'.join(lines)
 
     def base_size(self):
@@ -401,15 +401,26 @@ class GgufFile:
             raise ValueError(f'Unsupported dtype: {value.dtype}')
 
         # can only accept float32 right now
+        # NOTE: reverse shape to match ggml convention
         if ttype != GGMLQuantizationType.F32:
             raise ValueError('Can only directly set F32 tensors')
-        shape = value.shape
+        shape = value.shape[::-1]
 
         # store tensor
         self.tensors[name] = ttype, shape, value
 
     def get_tensor(self, name):
         return self.tensors.get(name)
+
+    def get_tensor_type(self, name):
+        if name in self.tensors:
+            ttype, _, _ = self.tensors[name]
+            return ttype
+
+    def get_tensor_shape(self, name):
+        if name in self.tensors:
+            _, shape, _ = self.tensors[name]
+            return shape
 
     def read(self, dtype, count=1):
         width = np.dtype(dtype).itemsize

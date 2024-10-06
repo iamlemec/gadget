@@ -188,7 +188,7 @@ create_funcs = {
 def create_tensor(ctx, typ, shp, nam=None):
     if (dims := len(shp)) not in create_funcs:
         raise ValueError(f'unsupported shape: {shp}')
-    tensor = create_funcs[dims](ctx, typ, *shp[::-1])
+    tensor = create_funcs[dims](ctx, typ, *shp)
     if nam is not None:
         ggml_set_name(tensor, nam.encode('utf-8'))
     return tensor

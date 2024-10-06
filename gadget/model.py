@@ -1,7 +1,9 @@
 # gguf + ggml models
 
+import ast
 import numpy as np
 from typing import get_type_hints
+from collections import defaultdict
 
 from .ggml import GGMLQuantizationType
 from .tensor import set_tensor_name
@@ -41,6 +43,13 @@ def freeze(func):
         return func()
     return wrapper
 
+def eval_parameter(expr, gguf):
+    if type(expr) is str:
+        return gguf.get_field(expr)
+    elif callable(expr):
+        return expr(gguf)
+    return expr
+
 class GgmlModel(GgmlCompute):
     def __init__(self, params, tensors, backend=None, framework=None):
         super().__init__(
@@ -61,7 +70,7 @@ class GgmlModel(GgmlCompute):
 
         # sub in default parameters
         params0 = {
-            k: gguf.get_field(v.field)
+            k: eval_parameter(v.field, gguf)
             for k, v in hints.items() if type(v) is Parameter
         }
 
@@ -102,7 +111,7 @@ def test_linear(input_dim=64, output_dim=32, batch_size=16, **kwargs):
     # simple model interface
     class TestModel(GgmlModel):
         # strings dimensions are filled in dynamically
-        x: Tensor('F32', ('batch_size', 'input_dim'))
+        x: Tensor('F32', ('input_dim', 'batch_size'))
 
         def forward(self):
             # get contexts and inputs

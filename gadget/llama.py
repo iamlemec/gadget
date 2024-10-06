@@ -2,6 +2,7 @@
 
 import numpy as np
 
+from .tensor import get_tensor_shape
 from .ggml import (
     ggml_add_inplace,
     ggml_get_rows,
@@ -19,17 +20,27 @@ from .model import GgmlModel, Parameter, Tensor
 ## bert model
 ##
 
+def get_embed_size_kv(gguf):
+    return gguf.get_tensor_shape('blk.0.attn_k.weight')[1]
+
 class LlamaModel(GgmlModel):
-    batch_size: Parameter('llama.context_length')
-    tokens    : Tensor('I32', ('batch_size',))
-    positions : Tensor('I32', ('batch_size',))
-    mask      : Tensor('F32', ('batch_size', 'batch_size'))
+    batch_size    : Parameter('llama.context_length')
+    context_length: Parameter('llama.context_length')
+    # embed_size_kv : Parameter(get_embed_size_kv)
+
+    tokens   : Tensor('I32', ('batch_size',))
+    positions: Tensor('I32', ('batch_size',))
+    mask     : Tensor('F32', ('batch_size', 'batch_size'))
+    # kcache   : Tensor('F32', ('llama.block_count', 'context_length', 'embed_size_kv'))
+    # vcache   : Tensor('F32', ('llama.block_count', 'context_length', 'embed_size_kv'))
 
     # perform param validation here
     def __init__(self, params, tensors, **kwargs):
-        # validate batch_size
-        if (bs := params['batch_size']) > (cl := params['llama.context_length']):
+        # validate batch_size and context_length
+        if (bs := params['batch_size']) > (cl := params['context_length']):
             raise ValueError('batch_size ({bs}) > context_length ({cl})')
+        if (cl := params['context_length']) > (cl0 := params['llama.context_length']):
+            raise ValueError('context_length ({cl}) > maximum context_length ({cl0})')
 
         # pass to model constructor
         super().__init__(params, tensors, **kwargs)
