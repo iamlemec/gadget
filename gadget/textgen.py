@@ -19,6 +19,10 @@ def pad_array(val, length, dtype=None, pad_val=0):
     arr[:len(val)] = torch.tensor(val, dtype=dtype)
     return arr
 
+def causal_mask(size):
+    binary = torch.tril(torch.ones(size, size))
+    return torch.where(binary == 1, 0.0, -torch.inf)
+
 def load_model(gguf_or_path, model_class, **kwargs):
     if type(gguf_or_path) is str:
         return model_class.from_path(gguf_or_path, **kwargs)
@@ -66,9 +70,10 @@ class TextGen:
 def test_textgen(gguf_path, model_id, prompt='The capital of France is', model_class=LlamaModel, batch_size=128, **kwargs):
     model = TextGen(gguf_path, model_id, model_class=model_class, batch_size=batch_size, **kwargs)
     toks = model.tokenize(prompt)
+    n_toks = len(toks)
     tokids, posids, mask = model.prepare_inputs(toks)
-    output = model.model(tokens=tokids, positions=posids, mask=mask)
-    return output[:len(toks)]
+    output = model.model(tokids, posids, mask, n_tokens=n_toks)
+    return output
 
 def test_huggingface(model_id, prompt='The capital of France is', **kwargs):
     from transformers import AutoTokenizer, AutoModelForCausalLM

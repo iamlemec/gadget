@@ -5,7 +5,7 @@ import ctypes
 from math import prod
 
 from .general import load_shared_lib, ctypes_function
-from .constants import GGMLQuantizationType
+from .constants import GGMLQuantizationType, GGML_MAX_DIMS
 
 ##
 ## library
@@ -24,6 +24,14 @@ def get_tensor_type(tensor):
 def get_tensor_nelem(tensor):
     value = tensor.contents
     return tuple(value.ne[:4])
+
+def get_tensor_strides(tensor):
+    value = tensor.contents
+    return tuple(value.nb[:4])
+
+def get_tensor_block(tensor):
+    value = tensor.contents
+    return value.blk_size
 
 def get_arg_info(a):
     if type(a) is ggml_tensor_p:
@@ -63,10 +71,12 @@ def check_inputs(check):
 def ggml_can_mul_mat(t0, t1):
     ne0 = get_tensor_nelem(t0)
     ne1 = get_tensor_nelem(t1)
+    nb0 = get_tensor_strides(t0)
     return (
         (ne0[0] == ne1[0]     ) and
         (ne1[2]  % ne0[2] == 0) and
-        (ne1[3]  % ne0[3] == 0)
+        (ne1[3]  % ne0[3] == 0) and
+        (nb0[0] <= nb0[1])
     )
 
 def ggml_can_add(t0, t1):
@@ -92,6 +102,15 @@ def ggml_can_get_rows(t0, t1):
 def ggml_can_reshape_3d(t, ne0, ne1, ne2):
     ne = get_tensor_nelem(t)
     return prod(ne) == ne0 * ne1 * ne2
+
+def ggml_can_view_3d(t, ne0, ne1, ne2, nb1, nb2, offset):
+    ne = get_tensor_nelem(t)
+    return prod(ne) == ne0 * ne1 * ne2
+
+def ggml_can_cpy(t0, t1):
+    ne0 = get_tensor_nelem(t0)
+    ne1 = get_tensor_nelem(t1)
+    return prod(ne0) == prod(ne1)
 
 ##
 ## constants
@@ -557,6 +576,12 @@ def ggml_new_tensor_4d(ctx, type, ne0, ne1, ne2, ne3): ...
     None
 )
 def ggml_set_name(tensor, name): ...
+
+@ctypes_function(_ggml,
+    [ggml_tensor_p],
+    ctypes.c_size_t
+)
+def ggml_element_size(tensor): ...
 
 @ctypes_function(_ggml,
     [ggml_tensor_p],
@@ -1045,6 +1070,8 @@ def ggml_set_2d(ctx, a, b, nb1, offset): ...
 )
 def ggml_set_2d_inplace(ctx, a, b, nb1, offset): ...
 
+@named_output
+@check_inputs(ggml_can_cpy)
 @ctypes_function(_ggml,
     [ggml_context_p, ggml_tensor_p, ggml_tensor_p],
     ggml_tensor_p
@@ -1126,6 +1153,7 @@ def ggml_reshape_4d(ctx, a, ne0, ne1, ne2, ne3): ...
 )
 def ggml_view_1d(ctx, a, ne0, offset): ...
 
+@named_output
 @ctypes_function(_ggml,
     [ggml_context_p, ggml_tensor_p, ctypes.c_int64, ctypes.c_int64, ctypes.c_size_t, ctypes.c_size_t],
     ggml_tensor_p
@@ -1212,6 +1240,7 @@ def ggml_soft_max(ctx, a): ...
 )
 def ggml_soft_max_inplace(ctx, a): ...
 
+@named_output
 @ctypes_function(_ggml,
     [ggml_context_p, ggml_tensor_p, ggml_tensor_p, ctypes.c_float, ctypes.c_float],
     ggml_tensor_p

@@ -40,7 +40,7 @@ from .tensor import (
 ##
 
 class GgmlCompute:
-    def __init__(self, params, tensors, model, backend=None, framework=None):
+    def __init__(self, params, tensors, model=None, backend=None, framework=None):
         # initialize empty
         self.backend = None
         self.ctx_tensors = None
@@ -53,7 +53,8 @@ class GgmlCompute:
         self.create_params(params)
         self.create_backend(backend)
         self.create_tensors(tensors)
-        self.create_graph(model)
+        if model is not None:
+            self.create_graph(model)
 
     def __del__(self):
         if self.ctx_graph is not None:

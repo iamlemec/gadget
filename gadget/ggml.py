@@ -44,6 +44,7 @@ from .libs._libggml import (
     ggml_set_name,
     ggml_is_quantized,
     ggml_is_transposed,
+    ggml_element_size,
     ggml_nelements,
     ggml_internal_get_type_traits,
     # tensor ops

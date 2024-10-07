@@ -6,6 +6,7 @@ from enum import IntEnum
 GGUF_MAGIC             = 0x46554747  # "GGUF"
 GGUF_VERSION           = 3
 GGUF_DEFAULT_ALIGNMENT = 32
+GGML_MAX_DIMS          = 4
 
 # field data types
 class GGUFValueType(IntEnum):

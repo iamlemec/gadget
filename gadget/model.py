@@ -51,11 +51,9 @@ def eval_parameter(expr, gguf):
     return expr
 
 class GgmlModel(GgmlCompute):
-    def __init__(self, params, tensors, backend=None, framework=None):
-        super().__init__(
-            params, tensors, freeze(self.forward),
-            backend=backend, framework=framework
-        )
+    def __init__(self, params, tensors, backend=None, framework=None, build_graph=True):
+        model = freeze(self.forward) if build_graph else None
+        super().__init__(params, tensors, model=model, backend=backend, framework=framework)
 
     @classmethod
     def from_gguf(cls, gguf, backend=None, framework=None, **params):
@@ -100,6 +98,9 @@ class GgmlModel(GgmlCompute):
 
     def forward(self):
         raise NotImplementedError('forward method must be implemented')
+
+    def build_graph(self):
+        super().create_graph(freeze(self.forward))
 
 ##
 ## testing

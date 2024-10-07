@@ -95,11 +95,16 @@ def attention_layer(
     # reshape to head_dim
     q = ggml_reshape_3d(ctx, q, head_dim, n_heads_q, batch_size)
     k = ggml_reshape_3d(ctx, k, head_dim, n_heads_kv, batch_size)
+    v = ggml_reshape_3d(ctx, v, head_dim, n_heads_kv, batch_size)
 
     # apply rotary position embeddings
     if rope_base is not None:
         q = rope_extended(ctx, q, pos=positions, n_dims=head_dim, freqs=rope_freqs, freq_base=rope_base)
         k = rope_extended(ctx, k, pos=positions, n_dims=head_dim, freqs=rope_freqs, freq_base=rope_base)
+
+    # apply kv cache
+    if kv_cache is not None:
+        k, v = kv_cache.update(k, v)
 
     # permute dimensions
     q = ggml_permute(ctx, q, 0, 2, 1, 3)
@@ -111,8 +116,7 @@ def attention_layer(
     kq = ggml_soft_max_ext(ctx, kq, mask, head_wgt, alibi)
 
     # pull in values
-    v = ggml_cont(ctx, ggml_transpose(ctx, v))
-    v = ggml_reshape_3d(ctx, v, batch_size, head_dim, n_heads_kv)
+    v = ggml_cont(ctx, ggml_permute(ctx, v, 1, 2, 0, 3))
     kqv = ggml_mul_mat(ctx, v, kq)
 
     # merge dimensions
