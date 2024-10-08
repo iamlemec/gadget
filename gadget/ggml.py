@@ -29,6 +29,7 @@ from .libs._libggml import (
     ggml_backend_tensor_get_async,
     # allocation
     ggml_gallocr_new,
+    ggml_gallocr_free,
     ggml_gallocr_reserve,
     ggml_gallocr_get_buffer_size,
     ggml_gallocr_alloc_graph,

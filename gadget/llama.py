@@ -11,6 +11,7 @@ from .ggml import (
     ggml_view_2d,
     ggml_cont,
 )
+from .tensor import get_tensor_info
 from .cache import KVCache
 from .layers import (
     linear_layer,
@@ -18,7 +19,7 @@ from .layers import (
     attention_layer,
     feed_forward_layer,
 )
-from .model import GgmlModel, Parameter, Tensor, freeze
+from .model import GgmlModel, Parameter, State, Tensor
 
 ##
 ## llama model
@@ -35,9 +36,12 @@ class LlamaModel(GgmlModel):
     context_length: Parameter('llama.context_length')
     head_dim_kv   : Parameter(get_head_dim_kv)
 
+    n_tokens: State(None)
+    n_past  : State(0)
+
     tokens   : Tensor('I32', ('batch_size',))
     positions: Tensor('I32', ('batch_size',))
-    mask     : Tensor('F32', ('batch_size', 'batch_size'))
+    mask     : Tensor('F32', ('context_length', 'context_length'))
     kcache   : Tensor('F32', ('head_dim_kv', 'llama.attention.head_count_kv', 'context_length', 'llama.block_count'))
     vcache   : Tensor('F32', ('head_dim_kv', 'llama.attention.head_count_kv', 'context_length', 'llama.block_count'))
 
@@ -50,21 +54,27 @@ class LlamaModel(GgmlModel):
             raise ValueError('context_length ({cl}) > maximum context_length ({cl0})')
 
         # pass to model constructor
-        super().__init__(params, tensors, build_graph=False, **kwargs)
+        super().__init__(params, tensors, **kwargs)
 
         # make kv cache
         self.kv_cache = KVCache(self.tensors['kcache'], self.tensors['vcache'])
 
-    def __call__(self, tokens, positions, mask, n_tokens=None):
-        self.n_tokens = len(tokens) if n_tokens is None else n_tokens
-        super().build_graph()
-        output = super().__call__(tokens=tokens, positions=positions, mask=mask)
-        self.kv_cache.increment_past(self.n_tokens)
+    def __call__(self, tokens, positions, n_tokens):
+        self.state['n_tokens'] = n_tokens
+        self.state['n_past'] = self.kv_cache.n_past
+        output = super().__call__(tokens=tokens, positions=positions)
+        self.kv_cache.increment_past(n_tokens)
         return output
+
+    def set_mask(self, mask):
+        self.set_input('mask', mask)
 
     # llama model function
     def forward(self):
         ctx = self.ctx_graph
+
+        # get runtime state
+        n_tokens = self.state['n_tokens']
 
         # get params
         n_layers, n_heads_q, n_heads_kv, rope_base, layer_norm_rms_eps = self.params[
@@ -80,13 +90,13 @@ class LlamaModel(GgmlModel):
         tokens, positions, mask = self.tensors['tokens', 'positions', 'mask']
 
         # select used input tokens
-        batch_size = self.params['batch_size']
-        mask_stride = ggml_element_size(mask) * batch_size
-        tokens = ggml_view_1d(ctx, tokens, self.n_tokens, 0, name='tokens_batch')
-        positions = ggml_view_1d(ctx, positions, self.n_tokens, 0, name='positions_batch')
+        tokens = ggml_view_1d(ctx, tokens, n_tokens, 0, name='tokens_batch')
+        positions = ggml_view_1d(ctx, positions, n_tokens, 0, name='positions_batch')
 
         # select used mask (contiguous for ggml_soft_max_ext)
-        mask = ggml_view_2d(ctx, mask, self.n_tokens, self.n_tokens, mask_stride, 0, name='mask_batch')
+        context_length = self.params['context_length']
+        mask_stride = ggml_element_size(mask) * context_length
+        mask = ggml_view_2d(ctx, mask, n_tokens, n_tokens, mask_stride, 0, name='mask_batch')
         mask = ggml_cont(ctx, mask)
 
         # get token embeddings

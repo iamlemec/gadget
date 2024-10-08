@@ -6,7 +6,7 @@ from typing import get_type_hints
 from collections import defaultdict
 
 from .ggml import GGMLQuantizationType
-from .tensor import set_tensor_name
+from .utils import AttrDict
 from .loader import GgufFile
 from .compute import GgmlCompute
 
@@ -15,6 +15,10 @@ from .compute import GgmlCompute
 ##
 
 class Parameter:
+    def __init__(self, field):
+        self.field = field
+
+class State:
     def __init__(self, field):
         self.field = field
 
@@ -51,9 +55,8 @@ def eval_parameter(expr, gguf):
     return expr
 
 class GgmlModel(GgmlCompute):
-    def __init__(self, params, tensors, backend=None, framework=None, build_graph=True):
-        model = freeze(self.forward) if build_graph else None
-        super().__init__(params, tensors, model=model, backend=backend, framework=framework)
+    def __init__(self, params, tensors, backend=None, framework=None):
+        super().__init__(params, tensors, backend=backend, framework=framework)
 
     @classmethod
     def from_gguf(cls, gguf, backend=None, framework=None, **params):
@@ -72,6 +75,12 @@ class GgmlModel(GgmlCompute):
             for k, v in hints.items() if type(v) is Parameter
         }
 
+        # get state fields
+        states = {
+            k: eval_parameter(v.field, gguf)
+            for k, v in hints.items() if type(v) is State
+        }
+
         # resolve string fields
         inputs = {
             k: (t.ttype, [resolve_field(x, params, params0, gguf.fields) for x in t.shape])
@@ -88,6 +97,10 @@ class GgmlModel(GgmlCompute):
         for name, (ttype, shape, tensor) in gguf.tensors.items():
             self.set_input(name, tensor)
 
+        # set null last state
+        self.state = AttrDict(states)
+        self.last_state = None
+
         # return model
         return self
 
@@ -99,8 +112,18 @@ class GgmlModel(GgmlCompute):
     def forward(self):
         raise NotImplementedError('forward method must be implemented')
 
-    def build_graph(self):
+    def rebuild_graph(self):
         super().create_graph(freeze(self.forward))
+
+    def __call__(self, **values):
+        # check if states have changed
+        new_state = tuple(self.state.values())
+        if new_state != self.last_state:
+            self.last_state = new_state
+            self.rebuild_graph()
+
+        # call compute
+        return super().__call__(**values)
 
 ##
 ## testing

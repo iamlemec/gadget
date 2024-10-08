@@ -1,6 +1,7 @@
 # gadget
 
 from . import ggml
+from . import tensor
 from . import loader
 from . import compute
 from . import model
@@ -17,5 +18,6 @@ from .embed import EmbedNumpy, EmbedTorch
 from .textgen import TextGen
 
 from .ggml import GGMLQuantizationType as T
+from .tensor import get_tensor_info
 
 __version__ = "0.1"

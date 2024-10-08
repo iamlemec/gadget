@@ -528,6 +528,12 @@ def ggml_backend_buffer_is_host(buffer): ...
 def ggml_gallocr_new(buft): ...
 
 @ctypes_function(_ggml,
+    [ggml_gallocr_p],
+    None
+)
+def ggml_gallocr_free(galloc): ...
+
+@ctypes_function(_ggml,
     [ggml_gallocr_p, ggml_cgraph_p],
     ctypes.c_bool
 )
