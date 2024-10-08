@@ -37,7 +37,6 @@ class TextGen:
         self.toker = AutoTokenizer.from_pretrained(model_id)
         self.batch_size = self.model.params['batch_size']
         self.context_length = self.model.params['context_length']
-        self.model.set_mask(causal_mask(self.context_length))
 
     def tokenize(self, texts):
         return self.toker(texts)['input_ids']
@@ -45,12 +44,12 @@ class TextGen:
     def detokenize(self, tokens):
         return self.toker.decode(tokens)
 
-    def prepare_inputs(self, tokens):
+    def prepare_inputs(self, tokens, n_past):
         n_toks = len(tokens)
         ctxpos = torch.arange(self.context_length)
         tokids = pad_array(tokens, self.batch_size, dtype=torch.int32)
         posids = pad_array(range(n_toks), self.batch_size, dtype=torch.int32)
-        mask   = torch.where(ctxpos[None, :] <= ctxpos[:, None], 0.0, -torch.inf).float()
+        mask   = torch.where(ctxpos[None, :] <= posids[:, None], 0.0, -torch.inf).float()
         return tokids, posids, mask
 
     def sample(self, logits, temperature=0.7, top_p=0.9, top_k=50):
@@ -69,12 +68,17 @@ class TextGen:
         gen = self.next_token(toks, **kwargs)
         return self.detokenize(gen)
 
-def test_textgen(gguf_path, model_id, prompt='The capital of France is', model_class=LlamaModel, batch_size=128, **kwargs):
-    model = TextGen(gguf_path, model_id, model_class=model_class, batch_size=batch_size, **kwargs)
+def test_textgen(
+    gguf_path, model_id, prompt='The capital of France is', model_class=LlamaModel,
+    batch_size=128, **kwargs
+):
+    model = TextGen(
+        gguf_path, model_id, model_class=model_class, batch_size=batch_size, **kwargs
+    )
     toks = model.tokenize(prompt)
-    n_toks = len(toks)
-    tokids, posids, mask = model.prepare_inputs(toks)
-    output = model.model(tokids, posids, n_tokens=n_toks)
+    n_toks, n_past = len(toks), model.model.state['n_past']
+    tokids, posids, mask = model.prepare_inputs(toks, n_past)
+    output = model.model(tokids, posids, mask, n_toks)
     return output
 
 def test_huggingface(model_id, prompt='The capital of France is', **kwargs):

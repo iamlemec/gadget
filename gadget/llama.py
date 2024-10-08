@@ -36,12 +36,12 @@ class LlamaModel(GgmlModel):
     context_length: Parameter('llama.context_length')
     head_dim_kv   : Parameter(get_head_dim_kv)
 
-    n_tokens: State(None)
     n_past  : State(0)
+    n_tokens: State(None)
 
     tokens   : Tensor('I32', ('batch_size',))
     positions: Tensor('I32', ('batch_size',))
-    mask     : Tensor('F32', ('context_length', 'context_length'))
+    mask     : Tensor('F32', ('context_length', 'batch_size'))
     kcache   : Tensor('F32', ('head_dim_kv', 'llama.attention.head_count_kv', 'context_length', 'llama.block_count'))
     vcache   : Tensor('F32', ('head_dim_kv', 'llama.attention.head_count_kv', 'context_length', 'llama.block_count'))
 
@@ -59,22 +59,19 @@ class LlamaModel(GgmlModel):
         # make kv cache
         self.kv_cache = KVCache(self.tensors['kcache'], self.tensors['vcache'])
 
-    def __call__(self, tokens, positions, n_tokens):
+    def __call__(self, tokens, positions, mask, n_tokens):
         self.state['n_tokens'] = n_tokens
         self.state['n_past'] = self.kv_cache.n_past
-        output = super().__call__(tokens=tokens, positions=positions)
+        output = super().__call__(tokens=tokens, positions=positions, mask=mask)
         self.kv_cache.increment_past(n_tokens)
         return output
-
-    def set_mask(self, mask):
-        self.set_input('mask', mask)
 
     # llama model function
     def forward(self):
         ctx = self.ctx_graph
 
         # get runtime state
-        n_tokens = self.state['n_tokens']
+        n_past, n_tokens = self.state['n_past', 'n_tokens']
 
         # get params
         n_layers, n_heads_q, n_heads_kv, rope_base, layer_norm_rms_eps = self.params[
