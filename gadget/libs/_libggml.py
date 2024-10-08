@@ -2,6 +2,8 @@
 
 import os
 import ctypes
+from operator import mul
+from itertools import accumulate
 from math import prod
 
 from .general import load_shared_lib, ctypes_function
@@ -16,6 +18,9 @@ _ggml = load_shared_lib('libggml.so', 'GADGET_GGML_LIB')
 ##
 ## function wrappers
 ##
+
+def cumprod(arr):
+    return list(accumulate(arr, mul))
 
 def get_tensor_type(tensor):
     value = tensor.contents
@@ -111,6 +116,14 @@ def ggml_can_cpy(t0, t1):
     ne0 = get_tensor_nelem(t0)
     ne1 = get_tensor_nelem(t1)
     return prod(ne0) == prod(ne1)
+
+# NOTE: assumes unquantized 32-bit!
+def ggml_can_soft_max_ext(t, mask, head_wgt, alibi):
+    sz = 4
+    ne = get_tensor_nelem(t)
+    nb = get_tensor_strides(t)
+    nb_exp = tuple(cumprod((sz,) + ne)[:-1])
+    return nb_exp == nb
 
 ##
 ## constants
@@ -1090,6 +1103,7 @@ def ggml_cpy(ctx, a, b): ...
 )
 def ggml_cast(ctx, a, type): ...
 
+@named_output
 @ctypes_function(_ggml,
     [ggml_context_p, ggml_tensor_p],
     ggml_tensor_p
@@ -1247,6 +1261,7 @@ def ggml_soft_max(ctx, a): ...
 def ggml_soft_max_inplace(ctx, a): ...
 
 @named_output
+@check_inputs(ggml_can_soft_max_ext)
 @ctypes_function(_ggml,
     [ggml_context_p, ggml_tensor_p, ggml_tensor_p, ctypes.c_float, ctypes.c_float],
     ggml_tensor_p

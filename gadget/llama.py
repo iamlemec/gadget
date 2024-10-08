@@ -11,7 +11,7 @@ from .ggml import (
     ggml_view_2d,
     ggml_cont,
 )
-from .tensor import get_tensor_info
+from .tensor import get_tensor_shape
 from .cache import KVCache
 from .layers import (
     linear_layer,
@@ -30,6 +30,14 @@ def get_head_dim_kv(gguf):
     embed_size_kv = gguf.get_tensor_shape('blk.0.attn_k.weight')[1]
     assert embed_size_kv % n_head_kv == 0
     return embed_size_kv // n_head_kv
+
+def clip_mask(ctx, mask, n_past, n_tokens, name=None):
+    context_length, batch_size = get_tensor_shape(mask)
+    mask_tsize = ggml_element_size(mask)
+    mask_stride = mask_tsize * context_length
+    mask_offset = mask_tsize * (context_length - n_past - batch_size)
+    mask = ggml_view_2d(ctx, mask, n_past + n_tokens, n_tokens, mask_stride, mask_offset)
+    return ggml_cont(ctx, mask, name=name)
 
 class LlamaModel(GgmlModel):
     batch_size    : Parameter('llama.context_length')
@@ -59,18 +67,22 @@ class LlamaModel(GgmlModel):
         # make kv cache
         self.kv_cache = KVCache(self.tensors['kcache'], self.tensors['vcache'])
 
-    def __call__(self, tokens, positions, mask, n_tokens):
+    def __call__(self, tokens, positions, n_tokens):
         self.state['n_tokens'] = n_tokens
         self.state['n_past'] = self.kv_cache.n_past
-        output = super().__call__(tokens=tokens, positions=positions, mask=mask)
+        output = super().__call__(tokens=tokens, positions=positions)
         self.kv_cache.increment_past(n_tokens)
         return output
+
+    def set_mask(self, mask):
+        self.set_input('mask', mask)
 
     # llama model function
     def forward(self):
         ctx = self.ctx_graph
 
         # get runtime state
+        batch_size, context_length = self.params['batch_size', 'context_length']
         n_past, n_tokens = self.state['n_past', 'n_tokens']
 
         # get params
@@ -80,23 +92,14 @@ class LlamaModel(GgmlModel):
             'llama.attention.layer_norm_rms_epsilon',
         ]
 
-        # get embed tensors
-        etok, rope_freqs = self.tensors['token_embd.weight', 'rope_freqs.weight']
-
-        # get input tensors
-        tokens, positions, mask = self.tensors['tokens', 'positions', 'mask']
-
         # select used input tokens
+        tokens, positions, mask = self.tensors['tokens', 'positions', 'mask']
         tokens = ggml_view_1d(ctx, tokens, n_tokens, 0, name='tokens_batch')
         positions = ggml_view_1d(ctx, positions, n_tokens, 0, name='positions_batch')
-
-        # select used mask (contiguous for ggml_soft_max_ext)
-        context_length = self.params['context_length']
-        mask_stride = ggml_element_size(mask) * context_length
-        mask = ggml_view_2d(ctx, mask, n_tokens, n_tokens, mask_stride, 0, name='mask_batch')
-        mask = ggml_cont(ctx, mask)
+        mask = clip_mask(ctx, mask, n_past, n_tokens, name='mask_batch')
 
         # get token embeddings
+        etok, rope_freqs = self.tensors['token_embd.weight', 'rope_freqs.weight']
         cur = ggml_get_rows(ctx, etok, tokens, name='embed=tok')
 
         # loop over layers

@@ -19,9 +19,11 @@ def pad_array(val, length, dtype=None, pad_val=0):
     arr[:len(val)] = torch.tensor(val, dtype=dtype)
     return arr
 
-def causal_mask(size):
-    binary = torch.tril(torch.ones(size, size, dtype=torch.bool))
-    return torch.where(binary, 0.0, -torch.inf)
+def causal_mask(context_length, batch_size):
+    ctxpos = torch.arange(batch_size - context_length, batch_size, dtype=torch.int32)
+    posids = torch.arange(batch_size, dtype=torch.int32)
+    mask   = torch.where(ctxpos[None, :] <= posids[:, None], 0.0, -torch.inf).float()
+    return mask
 
 def load_model(gguf_or_path, model_class, **kwargs):
     if type(gguf_or_path) is str:
@@ -37,6 +39,8 @@ class TextGen:
         self.toker = AutoTokenizer.from_pretrained(model_id)
         self.batch_size = self.model.params['batch_size']
         self.context_length = self.model.params['context_length']
+        self.mask = causal_mask(self.context_length, self.batch_size)
+        self.model.set_mask(self.mask)
 
     def tokenize(self, texts):
         return self.toker(texts)['input_ids']
@@ -44,13 +48,11 @@ class TextGen:
     def detokenize(self, tokens):
         return self.toker.decode(tokens)
 
-    def prepare_inputs(self, tokens, n_past):
+    def prepare_inputs(self, tokens):
         n_toks = len(tokens)
-        ctxpos = torch.arange(self.context_length)
         tokids = pad_array(tokens, self.batch_size, dtype=torch.int32)
-        posids = pad_array(range(n_toks), self.batch_size, dtype=torch.int32)
-        mask   = torch.where(ctxpos[None, :] <= posids[:, None], 0.0, -torch.inf).float()
-        return tokids, posids, mask
+        posids = torch.arange(self.batch_size, dtype=torch.int32)
+        return tokids, posids
 
     def sample(self, logits, temperature=0.7, top_p=0.9, top_k=50):
         probs = torch.exp(logits / temperature)
@@ -59,8 +61,8 @@ class TextGen:
 
     def next_token(self, tokens, **kwargs):
         n_toks = len(tokens)
-        tokids, posids, mask = self.prepare_inputs(tokens)
-        logits = self.model(tokens=tokids, positions=posids, n_tokens=n_toks)
+        tokids, posids = self.prepare_inputs(tokens)
+        logits = self.model(tokids, posids, n_toks)
         return self.sample(logits[n_toks-1,:], **kwargs)
 
     def generate_next(self, text, **kwargs):
@@ -76,9 +78,9 @@ def test_textgen(
         gguf_path, model_id, model_class=model_class, batch_size=batch_size, **kwargs
     )
     toks = model.tokenize(prompt)
-    n_toks, n_past = len(toks), model.model.state['n_past']
-    tokids, posids, mask = model.prepare_inputs(toks, n_past)
-    output = model.model(tokids, posids, mask, n_toks)
+    n_toks = len(toks)
+    tokids, posids = model.prepare_inputs(toks)
+    output = model.model(tokids, posids, n_toks)
     return output
 
 def test_huggingface(model_id, prompt='The capital of France is', **kwargs):
