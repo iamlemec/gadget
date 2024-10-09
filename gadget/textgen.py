@@ -20,7 +20,7 @@ def load_model(gguf_or_path, model_class, **kwargs):
     else:
         raise ValueError('must specify gguf file or path')
 
-def sample(self, logits, temperature=0.7, top_p=0.9, top_k=50):
+def sample(logits, temperature=0.7, top_p=0.9, top_k=50):
     probs = torch.exp(logits / temperature)
     probs = probs / torch.sum(probs)
     return torch.multinomial(probs, num_samples=1).item()
@@ -44,12 +44,22 @@ class TextGen:
         logits = self.logits(tokens)
         return sample(logits[-1,:], **kwargs)
 
-    def generate(self, text, **kwargs):
-        tokens = self.tokenize(text)
+    def stream_tokens(self, tokens, max_gen=128, **kwargs):
         batch = tokens
-        for _ in range(kwargs.get('max_new_tokens', 100)):
-            batch = [self.sample(batch, **kwargs)]
-            tokens += batch
+        for _ in range(max_gen):
+            tok = self.sample(batch, **kwargs)
+            batch = [tok]
+            yield tok
+
+    def stream(self, text, max_gen=128, **kwargs):
+        tokens = self.tokenize(text)
+        for tok in self.stream_tokens(tokens, max_gen, **kwargs):
+            yield self.detokenize([tok])
+
+    def generate(self, text, max_gen=128, **kwargs):
+        tokens = self.tokenize(text)
+        for tok in self.stream_tokens(tokens, max_gen, **kwargs):
+            tokens += [tok]
         return self.detokenize(tokens)
 
 def test_textgen(gguf_path, model_id, model_class=LlamaModel, batch_size=128, **kwargs):
