@@ -64,10 +64,10 @@ def attention_layer(
         n_heads_kv = n_heads
 
     # get dimensions
-    embed_dim, batch_size = get_tensor_shape(x)
-    _, embed_dim_q = get_tensor_shape(wq)
-    _, embed_dim_k = get_tensor_shape(wk)
-    _, embed_dim_v = get_tensor_shape(wv)
+    embed_dim, batch_size = get_tensor_shape(x, trim=2)
+    _, embed_dim_q = get_tensor_shape(wq, trim=2)
+    _, embed_dim_k = get_tensor_shape(wk, trim=2)
+    _, embed_dim_v = get_tensor_shape(wv, trim=2)
 
     # kv consistency
     if embed_dim_v != embed_dim_k:

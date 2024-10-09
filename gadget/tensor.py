@@ -135,7 +135,10 @@ def get_tensor_is_host(tensor):
 def get_tensor_shape(tensor, trim=True, numpy=False):
     value = tensor.contents
     nelem = tuple(value.ne[:4])
-    if trim:
+    if type(trim) is int:
+        assert all(n == 1 for n in nelem[trim:])
+        nelem = nelem[:trim]
+    elif trim:
         nelem = trim_nelem(nelem)
     if numpy:
         nelem = nelem[::-1]

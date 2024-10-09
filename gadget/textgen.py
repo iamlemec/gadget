@@ -24,9 +24,6 @@ class TextGen:
     def __init__(self, gguf_path, model_id, model_class=LlamaModel, **kwargs):
         self.model = load_model(gguf_path, model_class, framework='torch', **kwargs)
         self.toker = AutoTokenizer.from_pretrained(model_id)
-        self.context_length = self.model.params['context_length']
-        self.batch_size = self.model.params['batch_size']
-        self.tokens = torch.zeros(self.context_length, dtype=torch.int32)
 
     def tokenize(self, texts):
         return self.toker(texts)['input_ids']
@@ -40,7 +37,8 @@ class TextGen:
         return torch.multinomial(probs, num_samples=1).item()
 
     def next_token(self, tokens, **kwargs):
-        logits = self.model(self.tokens)
+        tokids = torch.tensor(tokens, dtype=torch.int32)
+        logits = self.model(tokids)
         return self.sample(logits[-1,:], **kwargs)
 
     def generate_next(self, text, **kwargs):

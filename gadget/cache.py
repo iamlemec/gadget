@@ -10,7 +10,7 @@ from .tensor import get_tensor_shape
 # tensor: [n_embd, n_head, n_ctx, n_layer]
 def get_layer_range(ctx, tensor, il, pos0, pos1):
     tsize = ggml_element_size(tensor)
-    n_embd, n_head, n_ctx, n_layer = get_tensor_shape(tensor)
+    n_embd, n_head, n_ctx, n_layer = get_tensor_shape(tensor, trim=4)
     length = pos1 - pos0
     offset = (il * n_ctx + pos0) * tsize * n_embd * n_head
     nb1, nb2 = tsize * n_embd, tsize * n_embd * n_head
@@ -38,8 +38,8 @@ class KVLayerView:
         self.cache.set_layer_range(self.ctx, self.graph, self.layer, self.n_past, self.n_past + num, k, v)
 
     def update(self, k, v):
-        _, _, batch_size_k = get_tensor_shape(k)
-        _, _, batch_size_v = get_tensor_shape(v)
+        _, _, batch_size_k = get_tensor_shape(k, trim=3)
+        _, _, batch_size_v = get_tensor_shape(v, trim=3)
         assert batch_size_k == batch_size_v
         batch_size = batch_size_k
         self.append(batch_size, k, v)
