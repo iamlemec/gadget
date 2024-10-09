@@ -20,6 +20,11 @@ def load_model(gguf_or_path, model_class, **kwargs):
     else:
         raise ValueError('must specify gguf file or path')
 
+def sample(self, logits, temperature=0.7, top_p=0.9, top_k=50):
+    probs = torch.exp(logits / temperature)
+    probs = probs / torch.sum(probs)
+    return torch.multinomial(probs, num_samples=1).item()
+
 class TextGen:
     def __init__(self, gguf_path, model_id, model_class=LlamaModel, **kwargs):
         self.model = load_model(gguf_path, model_class, framework='torch', **kwargs)
@@ -31,20 +36,21 @@ class TextGen:
     def detokenize(self, tokens):
         return self.toker.decode(tokens)
 
-    def sample(self, logits, temperature=0.7, top_p=0.9, top_k=50):
-        probs = torch.exp(logits / temperature)
-        probs = probs / torch.sum(probs)
-        return torch.multinomial(probs, num_samples=1).item()
-
-    def next_token(self, tokens, **kwargs):
+    def logits(self, tokens):
         tokids = torch.tensor(tokens, dtype=torch.int32)
-        logits = self.model(tokids)
-        return self.sample(logits[-1,:], **kwargs)
+        return torch.atleast_2d(self.model(tokids))
 
-    def generate_next(self, text, **kwargs):
-        toks = self.tokenize(text)
-        gen = self.next_token(toks, **kwargs)
-        return self.detokenize(gen)
+    def sample(self, tokens, **kwargs):
+        logits = self.logits(tokens)
+        return sample(logits[-1,:], **kwargs)
+
+    def generate(self, text, **kwargs):
+        tokens = self.tokenize(text)
+        batch = tokens
+        for _ in range(kwargs.get('max_new_tokens', 100)):
+            batch = [self.sample(batch, **kwargs)]
+            tokens += batch
+        return self.detokenize(tokens)
 
 def test_textgen(
     gguf_path, model_id, prompt='The capital of France is', model_class=LlamaModel,
