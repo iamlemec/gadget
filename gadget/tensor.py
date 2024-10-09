@@ -7,7 +7,10 @@ from .ggml import (
     GGMLQuantizationType as T,
     ggml_set_name,
     ggml_nelements,
+    ggml_nbytes,
+    ggml_element_size,
     ggml_is_quantized,
+    ggml_is_contiguous,
     ggml_new_tensor_1d,
     ggml_new_tensor_2d,
     ggml_new_tensor_3d,
@@ -138,6 +141,10 @@ def get_tensor_shape(tensor, trim=True, numpy=False):
         nelem = nelem[::-1]
     return nelem
 
+def get_tensor_strides(tensor):
+    value = tensor.contents
+    return tuple(value.nb[:4])
+
 def get_tensor_type(tensor):
     value = tensor.contents
     return T(value.type)
@@ -202,10 +209,11 @@ def set_tensor_name(tensor, name):
 
 # this assumes the data is contiguous
 # will implicity squeeze unit dimensions
-def array_to_tensor(array, tensor):
+def array_to_tensor(array, tensor, offset=0, strict=True):
     # get array type and shape (numpy or torch)
     atype = get_array_ntype(array)
     ashape = array.shape
+    abytes = array.nbytes
 
     # get tensor type and shape
     host = get_tensor_is_host(tensor)
@@ -213,8 +221,12 @@ def array_to_tensor(array, tensor):
     ntype = ttype_to_ntype[ttype]
     shape = get_tensor_shape(tensor, numpy=True)
     dshape = get_data_shape(tensor)
+    tbytes = ggml_nbytes(tensor)
+    esize = ggml_element_size(tensor)
+    obytes = offset * esize
 
     # get quantization situation
+    contig = ggml_is_contiguous(tensor)
     quant = ggml_is_quantized(ttype)
     halve = is_half(ttype)
     is_quantized = quant and atype == 'uint8'
@@ -231,10 +243,20 @@ def array_to_tensor(array, tensor):
     if not (will_quantize or will_halve) and ntype != atype:
         raise ValueError(f'array dtype ({atype}) does not match expected dtype ({ntype})')
 
-    # check shape match
-    if is_quantized and ashape != dshape:
+    # dont do sliced conversions
+    if will_quantize or will_halve and offset != 0:
+        raise ValueError('sliced assignment not supported for quantized or half tensors')
+
+    # check if tensor is within bounds
+    if obytes + abytes > tbytes:
+        raise ValueError(f'array is out of bounds for tensor ({offset} + {abytes} > {tbytes})')
+
+    # check contiguity and shape match
+    if strict and not contig:
+        raise ValueError('assignment to non-contiguous tensors is not supported')
+    if strict and is_quantized and ashape != dshape:
         raise ValueError(f'input shape {array.shape} does not match target (quantized) shape {dshape}')
-    if not is_quantized and ashape != shape:
+    if strict and not is_quantized and ashape != shape:
         raise ValueError(f'input shape {array.shape} does not match target shape {shape}')
 
     # get data pointers
@@ -250,7 +272,7 @@ def array_to_tensor(array, tensor):
         traits.from_float(src_p, dst_p, size)
     else:
         src_p = ctypes.cast(src, ctypes.c_void_p)
-        ggml_backend_tensor_set(tensor, src_p, 0, array.nbytes)
+        ggml_backend_tensor_set(tensor, src_p, obytes, abytes)
 
 # this makes a new array and copies
 # we want to avoid deallocating ggml buffers
@@ -259,6 +281,11 @@ def tensor_to_array(tensor, framework='numpy', device='cpu'):
     ttype = get_tensor_type(tensor)
     shape = get_tensor_shape(tensor, numpy=True)
     quant = ggml_is_quantized(ttype)
+    contig = ggml_is_contiguous(tensor)
+
+    # check if contiguous
+    if not contig:
+        raise ValueError('extraction from non-contiguous tensors is not supported')
 
     # create numpy array
     ntype = 'float32' if quant else ttype_to_ntype[ttype]

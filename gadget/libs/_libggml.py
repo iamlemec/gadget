@@ -609,6 +609,12 @@ def ggml_element_size(tensor): ...
 def ggml_nelements(tensor): ...
 
 @ctypes_function(_ggml,
+    [ggml_tensor_p],
+    ctypes.c_int64
+)
+def ggml_nbytes(tensor): ...
+
+@ctypes_function(_ggml,
     [ctypes.c_int],
     ctypes.c_bool
 )
@@ -619,6 +625,12 @@ def ggml_is_quantized(tensor): ...
     ctypes.c_bool
 )
 def ggml_is_transposed(tensor): ...
+
+@ctypes_function(_ggml,
+    [ggml_tensor_p],
+    ctypes.c_bool
+)
+def ggml_is_contiguous(tensor): ...
 
 @ctypes_function(_ggml,
     [ctypes.c_int],

@@ -116,10 +116,13 @@ class GgmlCompute:
         return self.get_tensor(tensor, **kwargs)
 
     # set tensor values using numpy
-    def set_input(self, name, array):
+    # offset is in terms of dimension=0 elements
+    def set_input(self, name, array, offset=None):
         tensor = self.tensors[name]
+        strict = offset is None
+        offset = 0 if offset is None else offset
         try:
-            array_to_tensor(array, tensor)
+            array_to_tensor(array, tensor, offset=offset, strict=strict)
         except ValueError as e:
             raise ValueError(f'error setting input "{name}":\n{e}')
 

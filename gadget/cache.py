@@ -24,17 +24,18 @@ def set_layer_range(ctx, src, dst, il, pos0, pos1):
     return cpy1
 
 class KVLayerView:
-    def __init__(self, cache, ctx, graph, layer):
+    def __init__(self, cache, ctx, graph, layer, n_past):
         self.cache = cache
         self.ctx = ctx
         self.graph = graph
         self.layer = layer
+        self.n_past = n_past
 
     def get(self, num):
-        return self.cache.get_layer(self.ctx, self.layer, num)
+        return self.cache.get_layer_range(self.ctx, self.layer, 0, self.n_past + num)
 
     def append(self, num, k, v):
-        self.cache.append_range(self.ctx, self.graph, self.layer, num, k, v)
+        self.cache.set_layer_range(self.ctx, self.graph, self.layer, self.n_past, self.n_past + num, k, v)
 
     def update(self, k, v):
         _, _, batch_size_k = get_tensor_shape(k)
@@ -48,7 +49,6 @@ class KVCache:
     def __init__(self, k_tensor, v_tensor):
         self.k_tensor = k_tensor
         self.v_tensor = v_tensor
-        self.n_past = 0
 
     def get_layer_range(self, ctx, layer, pos0, pos1):
         return (
@@ -56,20 +56,11 @@ class KVCache:
             get_layer_range(ctx, self.v_tensor, layer, pos0, pos1),
         )
 
-    def get_layer(self, ctx, layer, num):
-        return self.get_layer_range(ctx, layer, 0, self.n_past + num)
-
     def set_layer_range(self, ctx, graph, layer, pos0, pos1, k, v):
         k1 = set_layer_range(ctx, k, self.k_tensor, layer, pos0, pos1)
         v1 = set_layer_range(ctx, v, self.v_tensor, layer, pos0, pos1)
         ggml_build_forward_expand(graph, k1)
         ggml_build_forward_expand(graph, v1)
 
-    def append_range(self, ctx, graph, layer, num, k, v):
-        self.set_layer_range(ctx, graph, layer, self.n_past, self.n_past + num, k, v)
-
-    def layer_view(self, ctx, graph, layer):
-        return KVLayerView(self, ctx, graph, layer)
-
-    def increment_past(self, num):
-        self.n_past += num
+    def layer_view(self, ctx, graph, layer, n_past):
+        return KVLayerView(self, ctx, graph, layer, n_past)

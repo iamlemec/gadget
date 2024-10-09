@@ -31,6 +31,12 @@ def get_head_dim_kv(gguf):
     assert embed_size_kv % n_head_kv == 0
     return embed_size_kv // n_head_kv
 
+def causal_mask(context_length, batch_size):
+    ctxpos = np.arange(batch_size - context_length, batch_size, dtype=np.int32)
+    posids = np.arange(batch_size, dtype=np.int32)
+    mask   = np.where(ctxpos[None, :] <= posids[:, None], 0.0, -np.inf).astype(np.float32)
+    return mask
+
 def clip_mask(ctx, mask, n_past, n_tokens, name=None):
     context_length, batch_size = get_tensor_shape(mask)
     mask_tsize = ggml_element_size(mask)
@@ -47,8 +53,8 @@ class LlamaModel(GgmlModel):
     n_past  : State(0)
     n_tokens: State(None)
 
-    tokens   : Tensor('I32', ('batch_size',))
-    positions: Tensor('I32', ('batch_size',))
+    tokens   : Tensor('I32', ('context_length',))
+    positions: Tensor('I32', ('context_length',))
     mask     : Tensor('F32', ('context_length', 'batch_size'))
     kcache   : Tensor('F32', ('head_dim_kv', 'llama.attention.head_count_kv', 'context_length', 'llama.block_count'))
     vcache   : Tensor('F32', ('head_dim_kv', 'llama.attention.head_count_kv', 'context_length', 'llama.block_count'))
@@ -64,18 +70,27 @@ class LlamaModel(GgmlModel):
         # pass to model constructor
         super().__init__(params, tensors, **kwargs)
 
+        # set position and mask tensors
+        self.set_input('positions', np.arange(cl, dtype=np.int32))
+        self.set_input('mask', causal_mask(cl, bs))
+
         # make kv cache
         self.kv_cache = KVCache(self.tensors['kcache'], self.tensors['vcache'])
 
-    def __call__(self, tokens, positions, n_tokens):
-        self.state['n_tokens'] = n_tokens
-        self.state['n_past'] = self.kv_cache.n_past
-        output = super().__call__(tokens=tokens, positions=positions)
-        self.kv_cache.increment_past(n_tokens)
-        return output
+    def __call__(self, tokens):
+        # set token batch size
+        self.state['n_tokens'] = len(tokens)
+        n_past, n_tokens = self.state['n_past', 'n_tokens']
 
-    def set_mask(self, mask):
-        self.set_input('mask', mask)
+        # set inputs and evaluate model
+        self.set_input('tokens', tokens, offset=n_past)
+        output = super().__call__()
+
+        # update state
+        self.state['n_past'] += n_tokens
+
+        # return output
+        return output
 
     # llama model function
     def forward(self):
@@ -94,8 +109,8 @@ class LlamaModel(GgmlModel):
 
         # select used input tokens
         tokens, positions, mask = self.tensors['tokens', 'positions', 'mask']
-        tokens = ggml_view_1d(ctx, tokens, n_tokens, 0, name='tokens_batch')
-        positions = ggml_view_1d(ctx, positions, n_tokens, 0, name='positions_batch')
+        tokens = ggml_view_1d(ctx, tokens, n_tokens, n_past, name='tokens_batch')
+        positions = ggml_view_1d(ctx, positions, n_tokens, n_past, name='positions_batch')
         mask = clip_mask(ctx, mask, n_past, n_tokens, name='mask_batch')
 
         # get token embeddings
@@ -114,7 +129,7 @@ class LlamaModel(GgmlModel):
             ]
 
             # get attention interactions
-            cache = self.kv_cache.layer_view(ctx, self.graph, i)
+            cache = self.kv_cache.layer_view(ctx, self.graph, i, n_past)
             att = norm_layer(ctx, cur, wan, rms=True, eps=layer_norm_rms_eps, name=f'attn{i}_norm')
             att = attention_layer(
                 ctx, att, n_heads_q, mask, wq, wk, wv, wo, positions=positions, n_heads_kv=n_heads_kv,
