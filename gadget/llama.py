@@ -11,7 +11,7 @@ from .ggml import (
     ggml_view_2d,
     ggml_cont,
 )
-from .tensor import get_tensor_shape
+from .tensor import get_tensor_shape, get_tensor_info
 from .cache import KVCache
 from .layers import (
     linear_layer,
@@ -109,8 +109,9 @@ class LlamaModel(GgmlModel):
 
         # select used input tokens
         tokens, positions, mask = self.tensors['tokens', 'positions', 'mask']
-        tokens = ggml_view_1d(ctx, tokens, n_tokens, n_past, name='tokens_batch')
-        positions = ggml_view_1d(ctx, positions, n_tokens, n_past, name='positions_batch')
+        tsize, psize = ggml_element_size(tokens), ggml_element_size(positions)
+        tokens = ggml_view_1d(ctx, tokens, n_tokens, tsize * n_past, name='tokens_batch')
+        positions = ggml_view_1d(ctx, positions, n_tokens, psize * n_past, name='positions_batch')
         mask = clip_mask(ctx, mask, n_past, n_tokens, name='mask_batch')
 
         # get token embeddings

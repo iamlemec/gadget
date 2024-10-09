@@ -30,11 +30,11 @@ class TextGen:
         self.model = load_model(gguf_path, model_class, framework='torch', **kwargs)
         self.toker = AutoTokenizer.from_pretrained(model_id)
 
-    def tokenize(self, texts):
-        return self.toker(texts)['input_ids']
+    def tokenize(self, texts, **kwargs):
+        return self.toker(texts, **kwargs)['input_ids']
 
-    def detokenize(self, tokens):
-        return self.toker.decode(tokens)
+    def detokenize(self, tokens, **kwargs):
+        return self.toker.decode(tokens, **kwargs)
 
     def logits(self, tokens):
         tokids = torch.tensor(tokens, dtype=torch.int32)
@@ -52,17 +52,22 @@ class TextGen:
             tokens += batch
         return self.detokenize(tokens)
 
-def test_textgen(
-    gguf_path, model_id, prompt='The capital of France is', model_class=LlamaModel,
-    batch_size=128, **kwargs
-):
-    model = TextGen(
-        gguf_path, model_id, model_class=model_class, batch_size=batch_size, **kwargs
-    )
-    toks = model.tokenize(prompt)
-    tokens = torch.tensor(toks, dtype=torch.int32)
-    output = model.model(tokens)
-    return output
+def test_textgen(gguf_path, model_id, model_class=LlamaModel, batch_size=128, **kwargs):
+    model = TextGen(gguf_path, model_id, model_class=model_class, batch_size=batch_size, **kwargs)
+
+    query1 = 'The capital of France is'
+    query2 = 'Paris and'
+
+    tokes1 = model.tokenize(query1)
+    tokes2 = model.tokenize(query2, add_special_tokens=False)
+
+    tokid1 = torch.tensor(tokes1, dtype=torch.int32)
+    tokid2 = torch.tensor(tokes2, dtype=torch.int32)
+
+    output1 = model.model(tokid1)
+    output2 = model.model(tokid2)
+
+    return output1, output2
 
 def test_huggingface(model_id, prompt='The capital of France is', **kwargs):
     from transformers import AutoTokenizer, AutoModelForCausalLM

@@ -79,7 +79,7 @@ class GgmlCompute:
         if name is None or name == 'cpu':
             self.backend = ggml_backend_cpu_init()
             self.backend_type = 'cpu'
-        elif (reg := re.match(r'^cuda(?::(\d+))?$', 'cuda')) is not None:
+        elif (reg := re.match(r'^cuda(?::(\d+))?$', name)) is not None:
             num, = reg.groups()
             num = 0 if num is None else str(num)
             self.backend = ggml_backend_cuda_init(num)

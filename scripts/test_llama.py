@@ -14,5 +14,6 @@ hf_model = 'meta-llama/Llama-3.2-1B'
 if __name__ == '__main__':
     gg_output = test_textgen(gg_path, hf_model, batch_size=32, context_length=1024)
     print(gg_output)
-    hf_output = test_huggingface(hf_model)
-    print(hf_output)
+
+    # hf_output = test_huggingface(hf_model)
+    # print(hf_output)

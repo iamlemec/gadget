@@ -152,11 +152,14 @@ def get_tensor_type(tensor):
     value = tensor.contents
     return T(value.type)
 
-def get_tensor_info(tensor, numpy=False):
+def get_tensor_info(tensor, numpy=False, extra=False):
     name = get_tensor_name(tensor)
     ttype = get_tensor_type(tensor)
     shape = get_tensor_shape(tensor, numpy=numpy)
+    strides = get_tensor_strides(tensor)
     stat = f'{name}: {ttype.name} × {shape}'
+    if extra:
+        stat += f' [{strides}]'
     return stat
 
 def get_block_shape(tensor):
