@@ -56,6 +56,7 @@ class LlamaModel(GgmlModel):
     tokens   : Tensor('I32', ('context_length',))
     positions: Tensor('I32', ('context_length',))
     mask     : Tensor('F32', ('context_length', 'batch_size'))
+
     kcache   : Tensor('F32', ('head_dim_kv', 'llama.attention.head_count_kv', 'context_length', 'llama.block_count'))
     vcache   : Tensor('F32', ('head_dim_kv', 'llama.attention.head_count_kv', 'context_length', 'llama.block_count'))
 
@@ -78,6 +79,10 @@ class LlamaModel(GgmlModel):
         self.kv_cache = KVCache(self.tensors['kcache'], self.tensors['vcache'])
 
     def __call__(self, tokens):
+        # accept a raw list
+        if type(tokens) is list:
+            tokens = np.array(tokens, dtype=np.int32)
+
         # set token batch size
         self.state['n_tokens'] = len(tokens)
         n_past, n_tokens = self.state['n_past', 'n_tokens']

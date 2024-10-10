@@ -33,6 +33,9 @@ class TextGen:
         self.model = load_model(gguf_path, model_class, framework='torch', **kwargs)
         self.toker = AutoTokenizer.from_pretrained(model_id)
 
+    def reset(self):
+        self.model.reset()
+
     def tokenize(self, texts, **kwargs):
         return self.toker(texts, **kwargs)['input_ids']
 
@@ -40,8 +43,7 @@ class TextGen:
         return self.toker.decode(tokens, **kwargs)
 
     def logits(self, tokens):
-        tokids = torch.tensor(tokens, dtype=torch.int32)
-        return torch.atleast_2d(self.model(tokids))
+        return torch.atleast_2d(self.model(tokens))
 
     def sample(self, tokens, **kwargs):
         logits = self.logits(tokens)
@@ -54,16 +56,43 @@ class TextGen:
             batch = [tok]
             yield tok
 
-    def stream(self, text, max_gen=128, **kwargs):
+    def stream(self, text, **kwargs):
         tokens = self.tokenize(text)
-        for tok in self.stream_tokens(tokens, max_gen, **kwargs):
-            yield self.detokenize([tok])
+        for tok in self.stream_tokens(tokens, **kwargs):
+            yield self.detokenize([tok], add_special_tokens=False)
 
-    def generate(self, text, max_gen=128, **kwargs):
+    def generate(self, text, **kwargs):
         tokens = self.tokenize(text)
-        for tok in self.stream_tokens(tokens, max_gen, **kwargs):
+        for tok in self.stream_tokens(tokens, **kwargs):
             tokens += [tok]
         return self.detokenize(tokens)
+
+class TextChat(TextGen):
+    def __init__(self, gguf_path, model_id, system=None, **kwargs):
+        super().__init__(gguf_path, model_id, **kwargs)
+        self.system = system
+        self.reset(system)
+
+    def reset(self, system=None):
+        super().reset()
+        system = self.system if system is None else system
+        if system is not None:
+            self.history = [{'role': 'system', 'content': system}]
+        else:
+            self.history = []
+
+    def stream_chat(self, message, add_generation_prompt=True, **kwargs):
+        self.history.append({'role': 'user', 'content': message})
+        n_past = self.model.state['n_past']
+        tokens_full = self.toker.apply_chat_template(self.history, add_generation_prompt=add_generation_prompt)
+        tokens, reply = tokens_full[n_past:], ''
+        for tok in self.stream_tokens(tokens, **kwargs):
+            if tok == self.toker.eos_token_id:
+                break
+            text = self.detokenize([tok], add_special_tokens=False)
+            reply += text
+            yield text
+        self.history.append({'role': 'assistant', 'content': reply})
 
 def test_logits(gguf_path, model_id, model_class=LlamaModel, batch_size=128, **kwargs):
     model = TextGen(gguf_path, model_id, model_class=model_class, batch_size=batch_size, **kwargs)
@@ -73,18 +102,20 @@ def test_logits(gguf_path, model_id, model_class=LlamaModel, batch_size=128, **k
     return logits
 
 def test_logits_hf(model_id, **kwargs):
-    from transformers import AutoTokenizer, AutoModelForCausalLM
+    from transformers import AutoModelForCausalLM
     hf_prompt = 'The capital of France is'
     hf_toker = AutoTokenizer.from_pretrained(model_id)
     hf_model = AutoModelForCausalLM.from_pretrained(model_id, output_hidden_states=True)
-    hf_input = hf_toker(prompt, return_tensors='pt')['input_ids']
+    hf_input = hf_toker(hf_prompt, return_tensors='pt')['input_ids']
     hf_pos = torch.arange(len(hf_input[0])).unsqueeze(0)
     with torch.no_grad():
         hf_state = hf_model(hf_input)[0]
     return hf_state[0]
 
-def test_textgen(gguf_path, model_id, model_class=LlamaModel, batch_size=128, **kwargs):
+def test_textgen(
+    gguf_path, model_id, prompt='The capital of France is', model_class=LlamaModel, batch_size=128,
+    max_gen=128, **kwargs
+):
     model = TextGen(gguf_path, model_id, model_class=model_class, batch_size=batch_size, **kwargs)
-    prompt = 'The capital of France is'
-    for tok in model.stream(prompt):
+    for tok in model.stream(prompt, max_gen=max_gen):
         sprint(tok)

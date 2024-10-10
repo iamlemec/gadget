@@ -15,7 +15,7 @@ from .model import GgmlModel
 from .bert import BertModel
 from .llama import LlamaModel
 from .embed import EmbedNumpy, EmbedTorch
-from .textgen import TextGen
+from .textgen import TextGen, TextChat
 
 from .ggml import GGMLQuantizationType as T
 from .tensor import get_tensor_info
