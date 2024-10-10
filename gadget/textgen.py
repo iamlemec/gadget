@@ -25,6 +25,9 @@ def sample(logits, temperature=0.7, top_p=0.9, top_k=50):
     probs = probs / torch.sum(probs)
     return torch.multinomial(probs, num_samples=1).item()
 
+def sprint(text):
+    print(text, end='', flush=True)
+
 class TextGen:
     def __init__(self, gguf_path, model_id, model_class=LlamaModel, **kwargs):
         self.model = load_model(gguf_path, model_class, framework='torch', **kwargs)
@@ -62,47 +65,26 @@ class TextGen:
             tokens += [tok]
         return self.detokenize(tokens)
 
-def test_textgen(gguf_path, model_id, model_class=LlamaModel, batch_size=128, **kwargs):
+def test_logits(gguf_path, model_id, model_class=LlamaModel, batch_size=128, **kwargs):
     model = TextGen(gguf_path, model_id, model_class=model_class, batch_size=batch_size, **kwargs)
+    prompt = 'The capital of France is'
+    tokes = model.tokenize(prompt)
+    logits = model.logits(tokes)
+    return logits
 
-    query1 = 'The capital of France is'
-    query2 = 'Paris and'
-
-    tokes1 = model.tokenize(query1)
-    tokes2 = model.tokenize(query2, add_special_tokens=False)
-
-    tokid1 = torch.tensor(tokes1, dtype=torch.int32)
-    tokid2 = torch.tensor(tokes2, dtype=torch.int32)
-
-    output1 = model.model(tokid1)
-    output2 = model.model(tokid2)
-
-    return output1, output2
-
-def test_huggingface(model_id, prompt='The capital of France is', **kwargs):
+def test_logits_hf(model_id, **kwargs):
     from transformers import AutoTokenizer, AutoModelForCausalLM
-
+    hf_prompt = 'The capital of France is'
     hf_toker = AutoTokenizer.from_pretrained(model_id)
     hf_model = AutoModelForCausalLM.from_pretrained(model_id, output_hidden_states=True)
-
     hf_input = hf_toker(prompt, return_tensors='pt')['input_ids']
     hf_pos = torch.arange(len(hf_input[0])).unsqueeze(0)
-
     with torch.no_grad():
         hf_state = hf_model(hf_input)[0]
-
-        # hf_state = hf_model.model.embed_tokens(hf_input)
-
-        # hf_state = hf_layer(hf_state, position_ids=hf_pos)[0]
-
-        # hf_layer = hf_model.model.layers[0]
-        # residual = hf_state
-        # hf_state = hf_layer.input_layernorm(hf_state)
-        # hf_state = hf_layer.self_attn(hf_state, position_ids=hf_pos)[0]
-        # hf_state = residual + hf_state
-        # residual = hf_state
-        # hf_state = hf_layer.post_attention_layernorm(hf_state)
-        # hf_state = hf_layer.mlp(hf_state)
-        # hf_state = residual + hf_state
-
     return hf_state[0]
+
+def test_textgen(gguf_path, model_id, model_class=LlamaModel, batch_size=128, **kwargs):
+    model = TextGen(gguf_path, model_id, model_class=model_class, batch_size=batch_size, **kwargs)
+    prompt = 'The capital of France is'
+    for tok in model.stream(prompt):
+        sprint(tok)

@@ -92,6 +92,10 @@ class LlamaModel(GgmlModel):
         # return output
         return output
 
+    def reset(self):
+        # reset kv_cache position
+        self.state['n_past'] = 0
+
     # llama model function
     def forward(self):
         ctx = self.ctx_graph
