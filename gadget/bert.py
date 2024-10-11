@@ -27,13 +27,13 @@ class BertModel(GgmlModel):
     attention : Tensor('F32', ('batch_size', 'batch_size'))
 
     # perform param validation here
-    def __init__(self, params, tensors, **kwargs):
+    def __init__(self, params, tensors, states, **kwargs):
         # validate batch_size
         if (bs := params['batch_size']) > (cl := params['bert.context_length']):
             raise ValueError('batch_size ({bs}) > context_length ({cl})')
 
         # pass to model constructor
-        super().__init__(params, tensors, **kwargs)
+        super().__init__(params, tensors, states, **kwargs)
 
     # bert model function
     def forward(self):

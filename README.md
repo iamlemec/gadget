@@ -1,16 +1,45 @@
 # Gadget
 
-Simple embedding interface for `llama.cpp`.
+Gadget is a Python library for model creation using the GGML compute framework. It provides Python bindings for most low-level GGML functions, a Python interface for reading/writing GGUF files, and a high-level interface for creating and executing models. Here's a minimal example of how to use Gadget to create a model and run inference on the CPU:
+
+```python
+import numpy as np
+from gadget import GgmlModel, Tensor
+from gadget.ggml import ggml_mul_mat
+
+# simple model interface
+class LinearModel(GgmlModel):
+    weight: Tensor('F32', ('input_dim', 'output_dim'))
+    inputs: Tensor('F32', ('input_dim', 'batch_size'))
+
+    def forward(self):
+        ctx = self.ctx_graph
+        w, x = self.tensors['weight', 'inputs']
+        return ggml_mul_mat(ctx, w, x)
+
+# generate random weights and input data (note reverse order of dimensions)
+input_dim, output_dim, batch_size = 256, 32, 16
+weight_np = np.random.randn(output_dim, input_dim).astype(np.float32)
+inputs_np = np.random.randn(batch_size, input_dim).astype(np.float32)
+
+# create model and execute
+params = dict(input_dim=input_dim, output_dim=output_dim, batch_size=batch_size)
+values = dict(weight=weight_np)
+model = LinearModel.from_values(values, **params)
+output_np = model(inputs=inputs_np)
+```
+
+To run on the GPU, you can pass `backend='cuda'` to the `GgmlModel` constructor and pass the weights and data as `torch` tensors on the GPU. In practice, you'll likely be loading the weights for these models from GGUF files, in which case you can use the `from_gguf` and `from_path` constructors for `GgmlModel`. For more examples, see the `test_*` functions in `model.py` and `compute.py`, or the full fledged implementations in `llama.py` and `bert.py`.
 
 # Install
 
 To install with `pip` run:
 
 ```bash
-pip install -e . --user
+pip install -e .
 ```
 
-You can pass arguments to `cmake` using the `CMAKE_ARGS` environment varibles. For example, to add CUDA support:
+You can pass arguments to `cmake` using the `CMAKE_ARGS` environment variable. For example, to add CUDA support:
 
 ```bash
 CMAKE_ARGS="-DGGML_CUDA=ON"
@@ -18,13 +47,69 @@ CMAKE_ARGS="-DGGML_CUDA=ON"
 
 To build the shared libraries for local testing, you can use `cmake` directly
 ```bash
-cmake -DCMAKE_BUILD_TYPE=Debug -B build .
+cmake -B build .
 cmake --build build -j
 ```
 
+# Usage
+
+Currently, `gadget` supports plain `llama` for text generation and `bert` for embeddings, which actually covers a lot of cases. To do a simple completion with LLaMa, you can run something like
+
+```python
+from gadget import TextGen
+model = TextGen(path_to_gguf, huggingface_model_id)
+reply = model.generate(prompt)
+```
+
+For a conversation interface, you can use the `TextChat` class with
+
+```python
+from gadget import TextChat
+model = TextChat(path_to_gguf, huggingface_model_id, system=system_prompt)
+reply = model.generate_chat(prompt)
+```
+
+To do streaming generation, use the respective `stream` and `stream_chat` methods. You can control the maximum length of the generated text with the `max_gen` argument. As for BERT embeddings, you can run the following on a string or a list of strings `texts`:
+
+```python
+from gadget import EmbedTorch
+model = EmbedTorch(path_to_gguf, huggingface_model_id)
+vecs = model.embed(texts)
+```
+
+In all of the above, `path_to_gguf` is the path to the GGUF file and `huggingface_model_id` is the full name of the model on Huggingface. The default backend is `cpu`. To run on the GPU, use `backend='cuda'`. Metal is currently not supported, as I don't have anything to test it on.
+
+# Internals
+
+## Compute
+
+The lowest level interface is the `GgmlCompute` class, which takes care of creating, setting, and getting tensors, as well as graph creation and execution. The constructor takes three arguments:
+- `params`: a dictionary of parameter names and values
+- `tensors`: a dictionary of tensors specifications (`name: (dtype, shape)`)
+- `model`: a function that takes realized fields and tensors as inputs and returns an output tensor
+
+The `model` function should have the signature `model(context, params, tensors)` and return the output tensor. There are some simple usage examples at the end of `compute.py`.
+
+## Model
+
+In most cases, however, you'll want to use the higher level `GgmlModel` interface. This takes a cue from the JAX library `equinox` and uses class-level type hints to dictate which tensors should be created. Additionally, it takes a GGUF file (via `GgufFile`) as input and loads tensors from that. There are three types of metadata that can be included:
+- `Parameter`: values that can be set on object creation like `batch_size`
+- `Tensor`: tensors (input or working) that should be provided by the user
+- `State`: runtime variables whose mutation will trigger a graph recompile (like `n_tokens`)
+
+## LLaMa
+
+The class `LlamaModel` does single sequence generation with KV caching. The `context_length` parameter controls the size of the KV cache, and the `batch_size` parameter controls the maximum number of tokens that can be passed to the model in a single call.
+
+## BERT
+
+The class `BertModel` implements BERT embeddings, which covers a very wide variety of embedding models today. Currently, pooling is done outside of `ggml` in `numpy` or `torch`, but you could imagine subclassing `BertModel` and wrapping the `forward` function to perform pooling inside the model.
+
 # Conventions
 
-*Matrix shape and order*: tensors are row-major, meaning elements in a row are stored in contiguous order. However, the way in which dimensions are reported is reversed from `numpy`. The first number in the shape is the number of columns, the second is the number of rows, and so on. The logic here is that the first number denotes the number of elements in a row, the second denotes the number of columns and so on.
+*Matrix shape and order*: tensors are row-major, meaning elements in a row are stored in contiguous order. However, the way in which dimensions are reported is reversed from `numpy`. The first number in the shape is the number of columns, the second is the number of rows, and so on. The logic here is that the first number denotes the number of elements in a row, the second denotes the number of columns and so on. This makes computing strides for element access much easier.
+
+Tensor shapes are reported using the `ggml` convention. But you still have to keep this in mind that when setting tensor values with `set_input`, you need to use the reverse order from what `ggml` reports. So something that is shape `(k, n, m)` in `ggml` should be shape `(m, n, k)` in `numpy`.
 
 *Matrix multiplication*: for `ggml_mul_mat` and others, the *GGML*-style shape of inputs `a` and `b` and output `c` should be
 ```

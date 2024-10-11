@@ -38,6 +38,13 @@ def resolve_field(key, *dicts):
     else:
         return key
 
+def eval_parameter(expr, gguf):
+    if type(expr) is str:
+        return gguf.get_field(expr)
+    elif callable(expr):
+        return expr(gguf)
+    return expr
+
 ##
 ## model interface
 ##
@@ -47,16 +54,42 @@ def freeze(func):
         return func()
     return wrapper
 
-def eval_parameter(expr, gguf):
-    if type(expr) is str:
-        return gguf.get_field(expr)
-    elif callable(expr):
-        return expr(gguf)
-    return expr
-
 class GgmlModel(GgmlCompute):
-    def __init__(self, params, tensors, backend=None, framework=None):
+    def __init__(self, params, tensors, states, backend=None, framework=None):
         super().__init__(params, tensors, backend=backend, framework=framework)
+        self.state = AttrDict(states)
+        self.last_state = None
+
+    @classmethod
+    def from_values(cls, values=None, backend=None, framework=None, **params):
+        # default empty tensors
+        if values is None:
+            values = {}
+
+        # get type hints for model
+        hints = get_type_hints(cls)
+
+        # get default parameters
+        params0 = {k: v.field for k, v in hints.items() if type(v) is Parameter}
+
+        # get state fields
+        states = {k: v.field for k, v in hints.items() if type(v) is State}
+
+        # resolve tensor shapes
+        tensors = {
+            k: (t.ttype, [resolve_field(x, params, params0) for x in t.shape])
+            for k, t in hints.items() if type(t) is Tensor
+        }
+
+        # create model and graph
+        self = cls(params0 | params, tensors, states, backend=backend, framework=framework)
+
+        # set input values
+        for k, v in values.items():
+            self.set_input(k, v)
+
+        # return model
+        return self
 
     @classmethod
     def from_gguf(cls, gguf, backend=None, framework=None, **params):
@@ -69,7 +102,7 @@ class GgmlModel(GgmlCompute):
         # get type hints for model
         hints = get_type_hints(cls)
 
-        # sub in default parameters
+        # get default parameters
         params0 = {
             k: eval_parameter(v.field, gguf)
             for k, v in hints.items() if type(v) is Parameter
@@ -81,25 +114,21 @@ class GgmlModel(GgmlCompute):
             for k, v in hints.items() if type(v) is State
         }
 
-        # resolve string fields
-        inputs = {
+        # resolve tensor shapes
+        tensors = {
             k: (t.ttype, [resolve_field(x, params, params0, gguf.fields) for x in t.shape])
             for k, t in hints.items() if type(t) is Tensor
         }
 
         # create model and graph
         self = cls(
-            gguf.fields | params0 | params, weights | inputs,
-            backend=backend, framework=framework
+            gguf.fields | params0 | params, weights | tensors,
+            states, backend=backend, framework=framework
         )
 
         # assign tensors on backend
         for name, (ttype, shape, tensor) in gguf.tensors.items():
             self.set_input(name, tensor)
-
-        # set null last state
-        self.state = AttrDict(states)
-        self.last_state = None
 
         # return model
         return self

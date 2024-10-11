@@ -61,7 +61,7 @@ class LlamaModel(GgmlModel):
     vcache   : Tensor('F32', ('head_dim_kv', 'llama.attention.head_count_kv', 'context_length', 'llama.block_count'))
 
     # perform param validation here
-    def __init__(self, params, tensors, **kwargs):
+    def __init__(self, params, tensors, states, **kwargs):
         # validate batch_size and context_length
         if (bs := params['batch_size']) > (cl := params['context_length']):
             raise ValueError('batch_size ({bs}) > context_length ({cl})')
@@ -69,7 +69,7 @@ class LlamaModel(GgmlModel):
             raise ValueError('context_length ({cl}) > maximum context_length ({cl0})')
 
         # pass to model constructor
-        super().__init__(params, tensors, **kwargs)
+        super().__init__(params, tensors, states, **kwargs)
 
         # set position and mask tensors
         self.set_input('positions', np.arange(cl, dtype=np.int32))

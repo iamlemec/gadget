@@ -11,7 +11,7 @@ from . import embed
 from .ggml import GGMLQuantizationType, LlamaPoolingType
 from .loader import GgufFile
 from .compute import GgmlCompute
-from .model import GgmlModel
+from .model import GgmlModel, Parameter, State, Tensor
 from .bert import BertModel
 from .llama import LlamaModel
 from .embed import EmbedNumpy, EmbedTorch

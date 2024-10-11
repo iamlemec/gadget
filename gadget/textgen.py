@@ -94,6 +94,12 @@ class TextChat(TextGen):
             yield text
         self.history.append({'role': 'assistant', 'content': reply})
 
+    def generate_chat(self, message, **kwargs):
+        tokens = []
+        for tok in self.stream_chat(message, **kwargs):
+            tokens += [tok]
+        return self.detokenize(tokens)
+
 def test_logits(gguf_path, model_id, model_class=LlamaModel, batch_size=128, **kwargs):
     model = TextGen(gguf_path, model_id, model_class=model_class, batch_size=batch_size, **kwargs)
     prompt = 'The capital of France is'
