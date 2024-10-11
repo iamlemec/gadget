@@ -1,6 +1,6 @@
 # Gadget
 
-Gadget is a Python library for model creation using the GGML compute framework. It provides Python bindings for most low-level GGML functions, a Python interface for reading/writing GGUF files, and a high-level interface for creating and executing models. Here's a minimal example of how to use Gadget to create a model and run inference on the CPU:
+`gadget` is a Python library for model creation using the GGML compute framework. It provides Python bindings for most low-level GGML functions, a Python interface for reading/writing GGUF files, and a high-level interface for creating and executing models. Here's a minimal example of how to use `gadget` to create a model and run inference on the CPU:
 
 ```python
 import numpy as np
@@ -23,9 +23,10 @@ weight_np = np.random.randn(output_dim, input_dim).astype(np.float32)
 inputs_np = np.random.randn(batch_size, input_dim).astype(np.float32)
 
 # create model and execute
-params = dict(input_dim=input_dim, output_dim=output_dim, batch_size=batch_size)
-values = dict(weight=weight_np)
-model = LinearModel.from_values(values, **params)
+model = LinearModel.from_values(
+    dict(weight=weight_np), input_dim=input_dim,
+    output_dim=output_dim, batch_size=batch_size
+)
 output_np = model(inputs=inputs_np)
 ```
 
@@ -53,7 +54,7 @@ cmake --build build -j
 
 # Usage
 
-Currently, `gadget` supports plain `llama` for text generation and `bert` for embeddings, which actually covers a lot of cases. To do a simple completion with LLaMa, you can run something like
+`gadget` comes with built-in support for popular models, such as Llama for text generation and BERT for embeddings, which actually covers a lot of cases. To do a simple completion with Llama, you can run something like
 
 ```python
 from gadget import TextGen
@@ -84,22 +85,22 @@ In all of the above, `path_to_gguf` is the path to the GGUF file and `huggingfac
 ## `GgmlCompute`
 
 The lowest level interface is the `GgmlCompute` class, which takes care of creating, setting, and getting tensors, as well as graph creation and execution. The constructor takes three arguments:
-- `params`: a dictionary of parameter names and values
+- `params`: a dictionary of parameter names and values (`name: value`)
 - `tensors`: a dictionary of tensors specifications (`name: (dtype, shape)`)
-- `model`: a function that takes realized fields and tensors as inputs and returns an output tensor
+- `model`: a function that takes fields and tensors as inputs and returns an output tensor
 
-The `model` function should have the signature `model(context, params, tensors)` and return the output tensor. There are some simple usage examples at the end of `compute.py`.
+The `model` function should have the signature `model(context, params, tensors)` and return an output tensor. There are some simple usage examples at the end of `compute.py`.
 
 ## `GgmlModel`
 
 In most cases, however, you'll want to use the higher level `GgmlModel` interface. This takes a cue from the JAX library `equinox` and uses class-level type hints to dictate which tensors should be created. Additionally, it takes a GGUF file (via `GgufFile`) as input and loads tensors from that. There are three types of metadata that can be included:
 - `Parameter`: values that can be set on object creation like `batch_size`
-- `Tensor`: tensors (input or working) that should be provided by the user
+- `Tensor`: tensors (input or working) that can be provided by the user
 - `State`: runtime variables whose mutation will trigger a graph recompile (like `n_tokens`)
 
 ## `LlamaModel`
 
-The class `LlamaModel` does single sequence generation with KV caching. The `context_length` parameter controls the size of the KV cache, and the `batch_size` parameter controls the maximum number of tokens that can be passed to the model in a single call.
+The class `LlamaModel` does single sequence logit computation with KV caching. The `context_length` parameter controls the size of the KV cache, and the `batch_size` parameter controls the maximum number of tokens that can be passed to the model in a single call.
 
 ## `BertModel`
 
