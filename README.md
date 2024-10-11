@@ -1,6 +1,10 @@
-# Gadget
+<p align="center">
+<img src="demo/logo.svg" alt="gadget logo"/>
+</p>
 
-`gadget` is a Python library for model creation using the GGML compute framework. It provides Python bindings for most low-level GGML functions, a Python interface for reading/writing GGUF files, and a high-level interface for creating and executing models. Here's a minimal example of how to use `gadget` to create a model and run inference on the CPU:
+`gadget` is a Python library for model creation using the GGML compute framework. It provides Python bindings for most low-level GGML functions, a Python interface for reading/writing GGUF files, and a high-level interface for creating and executing models.
+
+Here's a minimal example of how to use `gadget` to create a model and run inference on the CPU:
 
 ```python
 import numpy as np
@@ -30,7 +34,13 @@ model = LinearModel.from_values(
 output_np = model(inputs=inputs_np)
 ```
 
-To run on the GPU, you can pass `backend='cuda'` to the `GgmlModel` constructor and pass the weights and data as `torch` tensors on the GPU. In practice, you'll likely be loading the weights for these models from GGUF files, in which case you can use the `from_gguf` and `from_path` constructors for `GgmlModel`. For more examples, see the `test_*` functions in `model.py` and `compute.py`, or the full fledged implementations in `llama.py` and `bert.py`.
+To run on the GPU, you can pass `backend='cuda'` to the `GgmlModel` constructor and pass the weights and data as `torch` tensors on the GPU. In practice, you'll likely be loading the weights for these models from GGUF files, in which case you can use the `from_gguf` and `from_path` constructors for `GgmlModel`.
+
+For more examples, see the `test_*` functions in `model.py` and `compute.py`, or the full fledged implementations in `llama.py` and `bert.py`. One can implement fairly complex models with a relatively small amount of code. Though adding in Python as a dependency is a deal-breaker for some projects, some advantages of `gadget` are:
+- tokenization is hell, let Huggingface handle it!
+- can do rapid prototyping and experimentation without having to compile anything
+- no need for round-trips to and from the GPU (could be important for embeddings?)
+- easier to rapidly integrate things like novel sampling methods (entropix??)
 
 # Install
 
