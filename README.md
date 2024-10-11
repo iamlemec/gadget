@@ -81,7 +81,7 @@ In all of the above, `path_to_gguf` is the path to the GGUF file and `huggingfac
 
 # Internals
 
-## Compute
+## `GgmlCompute`
 
 The lowest level interface is the `GgmlCompute` class, which takes care of creating, setting, and getting tensors, as well as graph creation and execution. The constructor takes three arguments:
 - `params`: a dictionary of parameter names and values
@@ -90,18 +90,18 @@ The lowest level interface is the `GgmlCompute` class, which takes care of creat
 
 The `model` function should have the signature `model(context, params, tensors)` and return the output tensor. There are some simple usage examples at the end of `compute.py`.
 
-## Model
+## `GgmlModel`
 
 In most cases, however, you'll want to use the higher level `GgmlModel` interface. This takes a cue from the JAX library `equinox` and uses class-level type hints to dictate which tensors should be created. Additionally, it takes a GGUF file (via `GgufFile`) as input and loads tensors from that. There are three types of metadata that can be included:
 - `Parameter`: values that can be set on object creation like `batch_size`
 - `Tensor`: tensors (input or working) that should be provided by the user
 - `State`: runtime variables whose mutation will trigger a graph recompile (like `n_tokens`)
 
-## LLaMa
+## `LlamaModel`
 
 The class `LlamaModel` does single sequence generation with KV caching. The `context_length` parameter controls the size of the KV cache, and the `batch_size` parameter controls the maximum number of tokens that can be passed to the model in a single call.
 
-## BERT
+## `BertModel`
 
 The class `BertModel` implements BERT embeddings, which covers a very wide variety of embedding models today. Currently, pooling is done outside of `ggml` in `numpy` or `torch`, but you could imagine subclassing `BertModel` and wrapping the `forward` function to perform pooling inside the model.
 
