@@ -129,8 +129,6 @@ class LlamaModel(GgmlModel):
 
         # loop over layers
         for i in range(n_layers):
-            last = cur
-
             # get layer tensors
             wq, wk, wv, wo, wan, wu, wd, wg, wn, = self.tensors[
                 f'blk.{i}.attn_q.weight'     , f'blk.{i}.attn_k.weight'   , f'blk.{i}.attn_v.weight'  ,
@@ -148,7 +146,7 @@ class LlamaModel(GgmlModel):
             )
 
             # add layer input to attention
-            att = ggml_add_inplace(ctx, att, last)
+            att = ggml_add_inplace(ctx, att, cur)
 
             # feed forward network on current
             cur = norm_layer(ctx, att, wn, rms=True, eps=layer_norm_rms_eps, name=f'ffn{i}_norm')

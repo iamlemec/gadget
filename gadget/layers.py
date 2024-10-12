@@ -47,7 +47,7 @@ def norm_layer(ctx, x, weight, bias=None, eps=0.0, rms=False, inplace=False, nam
 
 def rope_extended(
     ctx, x, pos, n_dims, freqs=None, mode=0, n_ctx_orig=0, freq_base=10000.0, freq_scale=1.0,
-    ext_factor=0.0, attn_factor=1.0, beta_fast=0.0, beta_slow=0.0, inplace=False
+    ext_factor=0.0, attn_factor=1.0, beta_fast=0.0, beta_slow=0.0, inplace=True
 ):
     return ggml_rope_ext(
         ctx, x, pos, freqs, n_dims, mode, n_ctx_orig, freq_base, freq_scale,
@@ -141,6 +141,6 @@ def feed_forward_layer(ctx, x, wu, wd, wg=None, bu=None, bd=None, bg=None, act='
     y = activations[act](ctx, y)
     if wg is not None:
         g = linear_layer(ctx, x, wg, bias=bg, name=f'{name}_gate')
-        y = ggml_mul(ctx, y, g)
+        y = ggml_mul_inplace(ctx, y, g)
     y = linear_layer(ctx, y, wd, bias=bd, name=f'{name}_down')
     return y
