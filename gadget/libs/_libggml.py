@@ -19,6 +19,17 @@ _ggml = load_shared_lib('libggml.so', 'GADGET_GGML_LIB')
 ## function wrappers
 ##
 
+ttype_size = {
+    GGMLQuantizationType.BF16: 2,
+    GGMLQuantizationType.F16: 2,
+    GGMLQuantizationType.F32: 4,
+    GGMLQuantizationType.F64: 8,
+    GGMLQuantizationType.I8: 1,
+    GGMLQuantizationType.I16: 2,
+    GGMLQuantizationType.I32: 4,
+    GGMLQuantizationType.I64: 8,
+}
+
 def cumprod(arr):
     return list(accumulate(arr, mul))
 
@@ -48,6 +59,14 @@ def get_arg_info(a):
 
 def get_input_info(*args):
     return '\n'.join([str(get_arg_info(a)) for a in args])
+
+# NOTE: this only handles non-quantized tensors
+def is_contiguous(tensor):
+    ne = get_tensor_nelem(tensor)
+    nb = get_tensor_strides(tensor)
+    tt = get_tensor_type(tensor)
+    ts = ttype_size[tt]
+    return nb == tuple(cumprod((ts,) + ne)[:-1])
 
 def named_output(func):
     def wrapper(*args, name=None):
@@ -117,13 +136,8 @@ def ggml_can_cpy(t0, t1):
     ne1 = get_tensor_nelem(t1)
     return prod(ne0) == prod(ne1)
 
-# NOTE: assumes unquantized 32-bit!
 def ggml_can_soft_max_ext(t, mask, head_wgt, alibi):
-    sz = 4
-    ne = get_tensor_nelem(t)
-    nb = get_tensor_strides(t)
-    nb_exp = tuple(cumprod((sz,) + ne)[:-1])
-    return nb_exp == nb
+    return is_contiguous(mask)
 
 ##
 ## constants

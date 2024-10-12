@@ -7,6 +7,9 @@ from .ggml import (
     ggml_add_inplace,
     ggml_get_rows,
     ggml_view_1d,
+    ggml_view_2d,
+    ggml_cont,
+    ggml_element_size,
 )
 from .layers import (
     linear_layer,
@@ -14,7 +17,7 @@ from .layers import (
     attention_layer,
     feed_forward_layer,
 )
-from .model import GgmlModel, Parameter, Tensor
+from .model import GgmlModel, Parameter, State, Tensor
 
 ##
 ## bert model
@@ -22,9 +25,10 @@ from .model import GgmlModel, Parameter, Tensor
 
 class BertModel(GgmlModel):
     batch_size: Parameter('bert.context_length')
+    n_tokens  : State(None)
     tokens    : Tensor('I32', ('batch_size',))
     positions : Tensor('I32', ('batch_size',))
-    attention : Tensor('F32', ('batch_size', 'batch_size'))
+    mask     : Tensor('F32', ('batch_size', 'batch_size'))
 
     # perform param validation here
     def __init__(self, params, tensors, states, **kwargs):
@@ -35,14 +39,22 @@ class BertModel(GgmlModel):
         # pass to model constructor
         super().__init__(params, tensors, states, **kwargs)
 
+    # update state with number of tokens
+    # NOTE: this still needs inputs of size batch_size
+    #       because we can't set 2d input tensor slices yet
+    def __call__(self, tokens, positions, mask, n_tokens=None):
+        self.state['n_tokens'] = n_tokens if n_tokens is not None else len(tokens)
+        return super().__call__(tokens=tokens, positions=positions, mask=mask)
+
     # bert model function
     def forward(self):
         ctx = self.ctx_graph
 
         # get params
-        n_layers, n_heads, embed_dim, layer_norm_eps = self.params[
-            'bert.block_count', 'bert.attention.head_count',
-            'bert.embedding_length', 'bert.attention.layer_norm_epsilon'
+        n_layers, n_heads, embed_dim, batch_size, layer_norm_eps = self.params[
+            'bert.block_count'     , 'bert.attention.head_count',
+            'bert.embedding_length', 'batch_size'               ,
+            'bert.attention.layer_norm_epsilon'
         ]
 
         # get weights
@@ -51,8 +63,17 @@ class BertModel(GgmlModel):
             'token_embd_norm.weight', 'token_embd_norm.bias',
         ]
 
-        # get inputs
-        tokens, positions, attention = self.tensors['tokens', 'positions', 'attention']
+        # get state
+        n_tokens = self.state['n_tokens']
+
+        # get input tensors
+        tokens, positions, mask = self.tensors['tokens', 'positions', 'mask']
+
+        # get just this batch of tokens
+        mask_stride = ggml_element_size(mask) * batch_size
+        tokens = ggml_view_1d(ctx, tokens, n_tokens, 0, name='tokens_batch')
+        positions = ggml_view_1d(ctx, positions, n_tokens, 0, name='positions_batch')
+        mask = ggml_cont(ctx, ggml_view_2d(ctx, mask, n_tokens, n_tokens, mask_stride, 0, name='mask_batch'))
 
         # get token embeddings (token+type+position+norm)
         cur = ggml_get_rows(ctx, etok, tokens, name='embed=tok')
@@ -76,7 +97,7 @@ class BertModel(GgmlModel):
 
             # get attention interactions
             att = attention_layer(
-                ctx, cur, n_heads, attention, wq, wk, wv, wo, bq=bq, bk=bk, bv=bv, bo=bo,
+                ctx, cur, n_heads, mask, wq, wk, wv, wo, bq=bq, bk=bk, bv=bv, bo=bo,
                 eps=layer_norm_eps, name=f'attn{i}'
             )
 

@@ -44,8 +44,8 @@ class EmbedBase:
             raise ValueError(f'Number of tokens ({total}) > batch_size ({self.batch_size})')
 
         # create input arrays and compute
-        tokids, posids, seqids, attention = self.prepare_inputs(tokens)
-        embeds = self.model(tokens=tokids, positions=posids, attention=attention)
+        tokids, posids, seqids, mask = self.prepare_inputs(tokens)
+        embeds = self.model(tokids, posids, mask, n_tokens=total)
 
         # do requested pooling
         pooling = self.pooling if pooling is None else pooling
@@ -94,8 +94,8 @@ class EmbedNumpy(EmbedBase):
         tokens = np.concatenate([*(np.array(t, dtype=np.int32) for t in tokens), padding])
         posits = np.concatenate([*(np.arange(n, dtype=np.int32) for n in ntoks), padding])
         seqids = np.concatenate([np.repeat(np.arange(nseqs, dtype=np.int32), ntoks), padding - 1])
-        attention = np.where(seqids[:, None] == seqids[None, :], 0.0, -np.inf).astype(np.float32)
-        return tokens, posits, seqids, attention
+        mask = np.where(seqids[:, None] == seqids[None, :], 0.0, -np.inf).astype(np.float32)
+        return tokens, posits, seqids, mask
 
 class EmbedTorch(EmbedBase):
     def __init__(self, *args, **kwargs):
@@ -109,8 +109,8 @@ class EmbedTorch(EmbedBase):
     @staticmethod
     def first_indices(values):
         uvals, indices = values.unique(return_inverse=True)
-        first = torch.empty(len(uvals), dtype=torch.int32)
-        order = torch.arange(len(values), dtype=torch.int32)
+        first = torch.empty(len(uvals), device=values.device, dtype=torch.int32)
+        order = torch.arange(len(values), device=values.device, dtype=torch.int32)
         first.scatter_reduce_(0, indices, order, reduce='amin')
         return first
 
@@ -143,8 +143,8 @@ class EmbedTorch(EmbedBase):
         tokens = torch.cat([*(torch.tensor(t, dtype=torch.int32) for t in tokens), padding])
         posits = torch.cat([*(torch.arange(n, dtype=torch.int32) for n in ntoks), padding])
         seqids = torch.cat([torch.repeat_interleave(torch.arange(nseqs, dtype=torch.int32), ntoks), padding - 1])
-        attention = torch.where(seqids[:, None] == seqids[None, :], 0.0, -torch.inf).float()
-        return tokens, posits, seqids, attention
+        mask = torch.where(seqids[:, None] == seqids[None, :], 0.0, -torch.inf).float()
+        return tokens, posits, seqids, mask
 
 ##
 ## test
