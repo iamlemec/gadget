@@ -3,6 +3,7 @@
 import numpy as np
 from math import prod
 from operator import itemgetter
+from ml_dtypes import bfloat16
 
 from .libs.constants import (
     GGUF_MAGIC, GGUF_VERSION, GGUF_DEFAULT_ALIGNMENT,
@@ -58,18 +59,20 @@ ttype_to_type = {
     GGMLQuantizationType.IQ2_S  : np.uint8  ,
     GGMLQuantizationType.IQ4_XS : np.uint8  ,
     GGMLQuantizationType.IQ1_M  : np.uint8  ,
+    GGMLQuantizationType.BF16   : bfloat16  ,
 }
 ttype_to_dtype = {k: np.dtype(v) for k, v in ttype_to_type.items()}
 
 # map for tensor types (unquantized only)
 type_to_ttype = {
-    np.float16: GGMLQuantizationType.F16  ,
-    np.float32: GGMLQuantizationType.F32  ,
-    np.float64: GGMLQuantizationType.F64  ,
-    np.int8   : GGMLQuantizationType.I8 ,
-    np.int16  : GGMLQuantizationType.I16,
-    np.int32  : GGMLQuantizationType.I32,
-    np.int64  : GGMLQuantizationType.I64,
+    np.float16: GGMLQuantizationType.F16 ,
+    np.float32: GGMLQuantizationType.F32 ,
+    np.float64: GGMLQuantizationType.F64 ,
+    np.int8   : GGMLQuantizationType.I8  ,
+    np.int16  : GGMLQuantizationType.I16 ,
+    np.int32  : GGMLQuantizationType.I32 ,
+    np.int64  : GGMLQuantizationType.I64 ,
+    bfloat16  : GGMLQuantizationType.BF16,
 }
 dtype_to_ttype = {np.dtype(k): v for k, v in type_to_ttype.items()}
 

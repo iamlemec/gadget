@@ -12,7 +12,7 @@ authors = [
     { name = "Douglas Hanley", email = "thesecretaryofwar@gmail.com" },
 ]
 dependencies = [
-    "numpy",
+    "numpy", "ml_dtypes",
 ]
 requires-python = ">=3.8"
 classifiers = [
