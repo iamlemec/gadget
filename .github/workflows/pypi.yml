@@ -39,7 +39,7 @@ jobs:
 
     environment:
       name: pypi
-      url: https://pypi.org/p/gadget
+      url: https://pypi.org/p/gadget-ml
 
     permissions:
       id-token: write  # IMPORTANT: mandatory for trusted publishing

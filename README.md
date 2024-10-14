@@ -47,7 +47,7 @@ For more examples, see the `test_*` functions in `model.py` and `compute.py`, or
 To install with `pip` run:
 
 ```bash
-pip install gadget
+pip install gadget-ml
 ```
 
 You can pass arguments to `cmake` using the `CMAKE_ARGS` environment variable. For example, to add CUDA support:
