@@ -88,14 +88,14 @@ def attention_layer(
     head_dim = head_dim_q
 
     # compute query, key, value
-    q = linear_layer(ctx, x, wq, bias=bq, name=f'{name}_q')
-    k = linear_layer(ctx, x, wk, bias=bk, name=f'{name}_k')
-    v = linear_layer(ctx, x, wv, bias=bv, name=f'{name}_v')
+    q = linear_layer(ctx, x, wq, bias=bq)
+    k = linear_layer(ctx, x, wk, bias=bk)
+    v = linear_layer(ctx, x, wv, bias=bv)
 
     # reshape to head_dim
-    q = ggml_reshape_3d(ctx, q, head_dim, n_heads_q, batch_size)
-    k = ggml_reshape_3d(ctx, k, head_dim, n_heads_kv, batch_size)
-    v = ggml_reshape_3d(ctx, v, head_dim, n_heads_kv, batch_size)
+    q = ggml_reshape_3d(ctx, q, head_dim, n_heads_q, batch_size, name=f'{name}_q')
+    k = ggml_reshape_3d(ctx, k, head_dim, n_heads_kv, batch_size, name=f'{name}_k')
+    v = ggml_reshape_3d(ctx, v, head_dim, n_heads_kv, batch_size, name=f'{name}_v')
 
     # apply rotary position embeddings
     if rope_base is not None:
@@ -113,7 +113,7 @@ def attention_layer(
     # compute interactions
     head_wgt = 1.0/sqrt(head_dim)
     kq = ggml_mul_mat(ctx, k, q)
-    kq = ggml_soft_max_ext(ctx, kq, mask, head_wgt, alibi)
+    kq = ggml_soft_max_ext(ctx, kq, mask, head_wgt, alibi, name=f'{name}_scores')
 
     # pull in values
     v = ggml_cont(ctx, ggml_permute(ctx, v, 1, 2, 0, 3))
