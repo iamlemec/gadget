@@ -47,7 +47,7 @@ For more examples, see the `test_*` functions in `model.py` and `compute.py`, or
 To install with `pip` run:
 
 ```bash
-pip install -e .
+pip install gadget
 ```
 
 You can pass arguments to `cmake` using the `CMAKE_ARGS` environment variable. For example, to add CUDA support:
@@ -56,7 +56,14 @@ You can pass arguments to `cmake` using the `CMAKE_ARGS` environment variable. F
 CMAKE_ARGS="-DGGML_CUDA=ON"
 ```
 
+You can install locally after cloning this repository with:
+
+```bash
+pip install -e .
+```
+
 To build the shared libraries for local testing, you can use `cmake` directly
+
 ```bash
 cmake -B build .
 cmake --build build -j
