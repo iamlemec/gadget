@@ -3,9 +3,9 @@ requires = ["scikit-build-core[pyproject]>=0.10.7"]
 build-backend = "scikit_build_core.build"
 
 [project]
-name = "gadget"
+name = "gadget-ml"
 dynamic = ["version"]
-description = "Embeddings library for ggml"
+description = "Model creation in Python powered by GGML"
 readme = "README.md"
 license = { text = "MIT" }
 authors = [
