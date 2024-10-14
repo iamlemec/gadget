@@ -99,14 +99,28 @@ The lowest level interface is the `GgmlCompute` class, which takes care of creat
 - `tensors`: a dictionary of tensors specifications (`name: (dtype, shape)`)
 - `model`: a function that takes fields and tensors as inputs and returns an output tensor
 
-The `model` function should have the signature `model(context, params, tensors)` and return an output tensor. There are some simple usage examples at the end of `compute.py`.
+The `model` function should have the signature `model(context, params, tensors)` and return an output tensor. There are some simple usage examples at the end of `compute.py`. It has the following methods:
+
+- `create_graph(model)` — creates the computational graph for a model function
+- `destroy_graph()` — deallocates the computational graph
+- `get_input(name)` — retrieves input tensor value by name
+- `set_input(name, array, offset=None)` — sets input tensor value by name
+- `get_named_node(name)` — retrieves tensor values for a graph node by name
+- `compute()` — executes the computational graph
+- `__call__(**values)` — sets input values, computes, and returns the output
 
 ## `GgmlModel`
 
 In most cases, however, you'll want to use the higher level `GgmlModel` interface. This takes a cue from the JAX library `equinox` and uses class-level type hints to dictate which tensors should be created. Additionally, it takes a GGUF file (via `GgufFile`) as input and loads tensors from that. There are three types of metadata that can be included:
+
 - `Parameter`: values that can be set on object creation like `batch_size`
 - `Tensor`: tensors (input or working) that can be provided by the user
 - `State`: runtime variables whose mutation will trigger a graph recompile (like `n_tokens`)
+
+This handles loading directly from GGUF objects or paths, and will automatically recompile the compute graph whenever `self.state` is modified. To use this class, subclass it with the appropriate type hints and implement the `forward` method. You can then initialize the model using the `from_values` or `from_gguf`/`from_path` methods. It also has the following methods:
+
+- `rebuild_graph()` — rebuilds the graph
+- `__call__(**kwargs)` — rebuilds the graph (if `self.state` has changed) and calls `GgmlCompute.__call__`
 
 ## `LlamaModel`
 
