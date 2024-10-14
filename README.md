@@ -36,7 +36,7 @@ output_np = model(inputs=inputs_np)
 
 To run on the GPU, you can pass `backend='cuda'` to the `GgmlModel` constructor and pass the weights and data as `torch` tensors on the GPU. In practice, you'll likely be loading the weights for these models from GGUF files, in which case you can use the `from_gguf` and `from_path` constructors for `GgmlModel`.
 
-For more examples, see the `test_*` functions in `model.py` and `compute.py`, or the full fledged implementations in `llama.py` and `bert.py`. One can implement fairly complex models with a relatively small amount of code. Though adding in Python as a dependency is a deal-breaker for some projects, some advantages of `gadget` are:
+For more examples, see the `test_*` functions in `model.py` and `compute.py`, or the full fledged implementations in `gadget/models`. One can implement fairly complex models with a relatively small amount of code. Though adding in Python as a dependency is a deal-breaker for some projects, some advantages of `gadget` are:
 - tokenization is hell, let Huggingface handle it!
 - can do rapid prototyping and experimentation without having to compile anything
 - no need for round-trips to and from the GPU (could be important for embeddings?)

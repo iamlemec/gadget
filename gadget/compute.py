@@ -64,8 +64,7 @@ class GgmlCompute:
             self.create_graph(model)
 
     def __del__(self):
-        if hasattr(self, 'graph'):
-            del self.graph
+        self.destroy_graph()
         if self.ctx_tensors is not None:
             ggml_free(self.ctx_tensors)
             self.ctx_tensors = None
