@@ -250,11 +250,11 @@ def array_to_tensor(array, tensor, offset=0, strict=True):
         raise ValueError(f'array dtype ({atype}) does not match expected dtype ({ntype})')
 
     # dont do sliced conversions
-    if will_quantize or will_halve and offset != 0:
+    if (will_quantize or will_halve) and offset != 0:
         raise ValueError('sliced assignment not supported for quantized or half tensors')
 
-    # check if tensor is within bounds
-    if obytes + abytes > tbytes:
+    # check if tensor is within bounds (unquantized only)
+    if not will_quantize and (obytes + abytes > tbytes):
         raise ValueError(f'array is out of bounds for tensor ({offset} + {abytes} > {tbytes})')
 
     # check contiguity and shape match

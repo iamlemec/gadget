@@ -5,7 +5,7 @@ import numpy as np
 from transformers import AutoTokenizer
 
 from .ggml import LlamaPoolingType
-from .bert import BertModel
+from .models.bert import BertModel
 
 # we don't want to require torch for gadget
 try:

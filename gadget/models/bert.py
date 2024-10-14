@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from .ggml import (
+from ..ggml import (
     ggml_add,
     ggml_add_inplace,
     ggml_get_rows,
@@ -11,13 +11,13 @@ from .ggml import (
     ggml_cont,
     ggml_element_size,
 )
+from ..model import GgmlModel, Parameter, State, Tensor
 from .layers import (
     linear_layer,
     norm_layer,
     attention_layer,
     feed_forward_layer,
 )
-from .model import GgmlModel, Parameter, State, Tensor
 
 ##
 ## bert model

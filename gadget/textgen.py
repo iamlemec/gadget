@@ -4,7 +4,7 @@ import numpy as np
 from transformers import AutoTokenizer
 
 from .loader import GgufFile
-from .llama import LlamaModel
+from .models.llama import LlamaModel
 
 # we don't want to require torch for gadget
 try:

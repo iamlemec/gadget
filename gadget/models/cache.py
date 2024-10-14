@@ -1,7 +1,7 @@
 # kv cache class
 
-from .ggml import ggml_view_3d, ggml_element_size, ggml_cpy, ggml_build_forward_expand
-from .tensor import get_tensor_shape
+from ..ggml import ggml_view_3d, ggml_element_size, ggml_cpy, ggml_build_forward_expand
+from ..tensor import get_tensor_shape
 
 ## kv cache layout (f32)
 # k : [n_embd, n_head, n_ctx, n_layer]

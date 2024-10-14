@@ -2,7 +2,7 @@
 
 from math import sqrt
 
-from .ggml import (
+from ..ggml import (
     LlamaPoolingType,
     ggml_norm,
     ggml_norm_inplace,
@@ -24,7 +24,7 @@ from .ggml import (
     ggml_reshape_3d,
     ggml_soft_max_ext,
 )
-from .tensor import get_tensor_shape
+from ..tensor import get_tensor_shape
 
 def linear_layer(ctx, x, weight, bias=None, name=None):
     x = ggml_mul_mat(ctx, weight, x, name=f'{name}_mul')

@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from .ggml import (
+from ..ggml import (
     ggml_element_size,
     ggml_add_inplace,
     ggml_get_rows,
@@ -11,7 +11,8 @@ from .ggml import (
     ggml_view_2d,
     ggml_cont,
 )
-from .tensor import get_tensor_shape, get_tensor_info
+from ..tensor import get_tensor_shape, get_tensor_info
+from ..model import GgmlModel, Parameter, State, Tensor
 from .cache import KVCache
 from .layers import (
     linear_layer,
@@ -19,7 +20,6 @@ from .layers import (
     attention_layer,
     feed_forward_layer,
 )
-from .model import GgmlModel, Parameter, State, Tensor
 
 ##
 ## llama model
