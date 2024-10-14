@@ -6,7 +6,7 @@ from operator import mul
 from itertools import accumulate
 from math import prod
 
-from .general import load_shared_lib, ctypes_function
+from .general import load_shared_lib, ctypes_function, DummyFunction
 from .constants import GGMLQuantizationType, GGML_MAX_DIMS
 
 ##
@@ -480,11 +480,14 @@ def ggml_graph_overhead(): ...
 )
 def ggml_backend_cpu_init(): ...
 
-@ctypes_function(_ggml,
-    [ctypes.c_int],
-    ggml_backend_p
-)
-def ggml_backend_cuda_init(): ...
+try:
+    @ctypes_function(_ggml,
+        [ctypes.c_int],
+        ggml_backend_p
+    )
+    def ggml_backend_cuda_init(): ...
+except:
+    ggml_backend_cuda_init = DummyFunction('CUDA backend not found')
 
 @ctypes_function(_ggml,
     None,

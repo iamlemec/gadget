@@ -22,4 +22,4 @@ from .models.llama import LlamaModel
 from .ggml import GGMLQuantizationType as T
 from .tensor import get_tensor_info
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
