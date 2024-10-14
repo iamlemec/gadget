@@ -40,7 +40,9 @@ For more examples, see the `test_*` functions in `model.py` and `compute.py`, or
 - tokenization is hell, let Huggingface handle it!
 - can do rapid prototyping and experimentation without having to compile anything
 - no need for round-trips to and from the GPU (could be important for embeddings?)
-- easier to rapidly integrate things like novel sampling methods (entropix??)
+- easier to rapidly integrate things like novel sampling methods
+
+**BONUS**: We now have `entropix` integration! If you check out `gadget/shrek.py`, you'll find `ShrekGen` and `ShrekChat` analogs of `TextGen` and `TextChat` that use the sampling method from [entropix](https://github.com/xjdr-alt/entropix) (aka "Shrek sampler"). Note that you'll need to install `entropix` separately, as it is not a strict dependency of `gadget`.
 
 # Install
 

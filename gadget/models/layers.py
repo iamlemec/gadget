@@ -112,7 +112,7 @@ def attention_layer(
 
     # compute interactions
     head_wgt = 1.0/sqrt(head_dim)
-    kq = ggml_mul_mat(ctx, k, q)
+    kq = ggml_mul_mat(ctx, k, q, name=f'{name}_pre_scores')
     kq = ggml_soft_max_ext(ctx, kq, mask, head_wgt, alibi, name=f'{name}_scores')
 
     # pull in values
