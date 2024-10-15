@@ -157,20 +157,20 @@ The class `TextGen` handles text generation and streaming. The constructor accep
 It has the following additional methods:
 
 - `reset()` — resets the model state
-- `tokenize(texts)` — tokenizes a list of texts
+- `tokenize(texts, **kwargs)` — tokenizes a list of texts
 - `detokenize(tokens)` — detokenizes a list of tokens
 - `logits(tokens)` — computes the logits for a sequence of tokens
-- `sample(tokens)` — samples a single token from the model
-- `stream_tokens(tokens)` — streams tokens from the model
-- `stream(text)` — streams text from the model
-- `generate(text)` — generates text from the model
+- `sample(tokens, temperature=0.7, top_p=0.9, top_k=50)` — samples a single token from the model
+- `stream_tokens(tokens, max_gen=128)` — streams tokens from the model
+- `stream(text, max_gen=128)` — streams text from the model
+- `generate(text, max_gen=128)` — generates text from the model
 
 ## `TextChat`
 
 The class `TextChat` is a subclass of `TextGen` that adds a system prompt and handles chat history. It has the following additional methods:
 
-- `stream_chat(text)` — streams text from the model
-- `generate_chat(text)` — generates text from the model
+- `stream_chat(text, max_gen=128, prefill=None)` — streams text from the model
+- `generate_chat(text, max_gen=128, prefill=None)` — generates text from the model
 
 # Conventions
 
