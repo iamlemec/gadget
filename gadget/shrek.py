@@ -23,8 +23,8 @@ class ShrekMixin:
         nexts = sample(batch_tokens, batch_logits, batch_scores, **kwargs)
         return nexts.squeeze(0).item()
 
-class ShrekGen(TextGen, ShrekMixin):
+class ShrekGen(ShrekMixin, TextGen):
     pass
 
-class ShrekChat(TextChat, ShrekMixin):
+class ShrekChat(ShrekMixin, TextChat):
     pass

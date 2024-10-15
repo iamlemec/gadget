@@ -32,7 +32,8 @@ def get_head_dim_kv(gguf):
     return embed_size_kv // n_head_kv
 
 def causal_mask(context_length, batch_size):
-    ctxpos = np.arange(batch_size - context_length, batch_size, dtype=np.int32)
+    minctx = int(batch_size) - int(context_length) # cast to int to avoid overflow
+    ctxpos = np.arange(minctx, batch_size, dtype=np.int32)
     posids = np.arange(batch_size, dtype=np.int32)
     mask   = np.where(ctxpos[None, :] <= posids[:, None], 0.0, -np.inf).astype(np.float32)
     return mask
@@ -46,7 +47,7 @@ def clip_mask(ctx, mask, n_past, n_tokens, name=None):
     return ggml_cont(ctx, mask, name=name)
 
 class LlamaModel(GgmlModel):
-    batch_size    : Parameter('llama.context_length')
+    batch_size    : Parameter(512)
     context_length: Parameter('llama.context_length')
     head_dim_kv   : Parameter(get_head_dim_kv)
 

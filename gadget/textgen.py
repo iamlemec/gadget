@@ -81,11 +81,16 @@ class TextChat(TextGen):
         else:
             self.history = []
 
-    def stream_chat(self, message, add_generation_prompt=True, **kwargs):
+    def stream_chat(self, message, prefill=None, add_generation_prompt=True, **kwargs):
         self.history.append({'role': 'user', 'content': message})
         n_past = self.model.state['n_past']
         tokens_full = self.toker.apply_chat_template(self.history, add_generation_prompt=add_generation_prompt)
-        tokens, reply = tokens_full[n_past:], ''
+        if prefill is not None:
+            tokens_full += self.tokenize(prefill, add_special_tokens=False)
+            reply = prefill
+        else:
+            reply = ''
+        tokens = tokens_full[n_past:]
         for tok in self.stream_tokens(tokens, **kwargs):
             if tok == self.toker.eos_token_id:
                 break

@@ -107,6 +107,8 @@ The lowest level interface is the `GgmlCompute` class, which takes care of creat
 - `params`: a dictionary of parameter names and values (`name: value`)
 - `tensors`: a dictionary of tensors specifications (`name: (dtype, shape)`)
 - `model`: a function that takes fields and tensors as inputs and returns an output tensor
+- `backend = 'cpu'`: the backend to use for computation (`cpu` or `cuda`)
+- `framework = 'numpy'`: the default framework for array output (`numpy` or `torch`)
 
 The `model` function should have the signature `model(context, params, tensors)` and return an output tensor. There are some simple usage examples at the end of `compute.py`. It has the following methods:
 
@@ -133,11 +135,42 @@ This handles loading directly from GGUF objects or paths, and will automatically
 
 ## `LlamaModel`
 
-The class `LlamaModel` does single sequence logit computation with KV caching. The `context_length` parameter controls the size of the KV cache, and the `batch_size` parameter controls the maximum number of tokens that can be passed to the model in a single call.
+The class `LlamaModel` does single sequence logit computation with KV caching. The `context_length` parameter controls the size of the KV cache, and the `batch_size` parameter controls the maximum number of tokens that can be passed to the model in a single call. It has the following additional methods:
+
+- `reset()` — resets the model state (sets `n_past = 0`)
+- `__call__(tokens)` — sets the input tokens and calls `GgmlCompute.__call__`
 
 ## `BertModel`
 
-The class `BertModel` implements BERT embeddings, which covers a very wide variety of embedding models today. Currently, pooling is done outside of `ggml` in `numpy` or `torch`, but you could imagine subclassing `BertModel` and wrapping the `forward` function to perform pooling inside the model.
+The class `BertModel` implements BERT embeddings, which covers a very wide variety of embedding models today. Currently, pooling is done outside of `ggml` in `numpy` or `torch`, but you could imagine subclassing `BertModel` and wrapping the `forward` function to perform pooling inside the model. It has the following additional methods:
+
+- `__call__(tokens, positions, mask, n_tokens=None)` — sets the input tokens, positions, and mask, and calls `GgmlCompute.__call__`
+
+## `TextGen`
+
+The class `TextGen` handles text generation and streaming. The constructor accepts the following arguments:
+
+- `gguf_or_path`: path to a GGUF file or Huggingface model ID
+- `model_id`: Huggingface model ID (for tokenizer only)
+- `model_class = LlamaModel`: class of model to use for generation
+
+It has the following additional methods:
+
+- `reset()` — resets the model state
+- `tokenize(texts)` — tokenizes a list of texts
+- `detokenize(tokens)` — detokenizes a list of tokens
+- `logits(tokens)` — computes the logits for a sequence of tokens
+- `sample(tokens)` — samples a single token from the model
+- `stream_tokens(tokens)` — streams tokens from the model
+- `stream(text)` — streams text from the model
+- `generate(text)` — generates text from the model
+
+## `TextChat`
+
+The class `TextChat` is a subclass of `TextGen` that adds a system prompt and handles chat history. It has the following additional methods:
+
+- `stream_chat(text)` — streams text from the model
+- `generate_chat(text)` — generates text from the model
 
 # Conventions
 
