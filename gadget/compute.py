@@ -87,7 +87,7 @@ class GgmlCompute:
             self.backend_type = 'cuda'
         elif name == 'metal':
             self.backend = ggml_backend_metal_init()
-            self.backend_type = 'metal'
+            self.backend_type = 'cpu'
         else:
             raise ValueError(f'unknown backend: {name}')
 

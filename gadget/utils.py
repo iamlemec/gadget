@@ -38,7 +38,7 @@ class AttrDict(UserDict):
     def __getitem__(self, key):
         # handle tuple accessor case (prevent recursion)
         if type(key) is tuple:
-            return [super().__getitem__(k) for k in key]
+            return [super(AttrDict, self).__getitem__(k) for k in key]
 
         # key type validation
         if type(key) is not str:

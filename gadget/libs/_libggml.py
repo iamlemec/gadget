@@ -13,7 +13,7 @@ from .constants import GGMLQuantizationType, GGML_MAX_DIMS
 ## library
 ##
 
-_ggml = load_shared_lib('libggml.so', 'GADGET_GGML_LIB')
+_ggml = load_shared_lib('libggml', 'GADGET_GGML_LIB')
 
 ##
 ## function wrappers
@@ -488,6 +488,15 @@ try:
     def ggml_backend_cuda_init(): ...
 except:
     ggml_backend_cuda_init = DummyFunction('CUDA backend not found')
+
+try:
+    @ctypes_function(_ggml,
+        None,
+        ggml_backend_p
+    )
+    def ggml_backend_metal_init(): ...
+except:
+    ggml_backend_metal_init = DummyFunction('Metal backend not found')
 
 @ctypes_function(_ggml,
     None,

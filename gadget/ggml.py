@@ -17,6 +17,7 @@ from .libs._libggml import (
     # backend
     ggml_backend_cpu_init,
     ggml_backend_cuda_init,
+    ggml_backend_metal_init,
     ggml_backend_free,
     ggml_backend_alloc_ctx_tensors,
     ggml_backend_get_default_buffer_type,

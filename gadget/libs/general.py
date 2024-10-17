@@ -1,6 +1,7 @@
 ### general stuff
 
 import os
+import sys
 import ctypes
 
 ##
@@ -18,8 +19,19 @@ class DummyFunction:
 ## ctypes helpers
 ##
 
+# get library extension for system
+plat_ext = {
+    'linux': 'so',
+    'darwin': 'dylib',
+    'win32': 'dll',
+}
+
 # load a shared lib with env override
-def load_shared_lib(lib_name, env_var=None):
+def load_shared_lib(lib_base=None, env_var=None):
+    # get filename
+    lib_ext = plat_ext[sys.platform]
+    lib_name = f'{lib_base}.{lib_ext}'
+
     # get shared library path
     if env_var is not None and env_var in os.environ:
         lib_path = os.environ[env_var]
