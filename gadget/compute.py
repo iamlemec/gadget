@@ -17,6 +17,7 @@ from .ggml import (
     ggml_build_forward_expand,
     ggml_backend_cpu_init,
     ggml_backend_cuda_init,
+    ggml_backend_metal_init,
     ggml_backend_free,
     ggml_backend_alloc_ctx_tensors,
     ggml_backend_get_default_buffer_type,
@@ -84,6 +85,9 @@ class GgmlCompute:
             num = 0 if num is None else str(num)
             self.backend = ggml_backend_cuda_init(num)
             self.backend_type = 'cuda'
+        elif name == 'metal':
+            self.backend = ggml_backend_metal_init()
+            self.backend_type = 'metal'
         else:
             raise ValueError(f'unknown backend: {name}')
 
