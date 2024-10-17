@@ -34,7 +34,7 @@ class BertModel(GgmlModel):
     def __init__(self, params, tensors, states, **kwargs):
         # validate batch_size
         if (bs := params['batch_size']) > (cl := params['bert.context_length']):
-            raise ValueError('batch_size ({bs}) > context_length ({cl})')
+            raise ValueError(f'batch_size ({bs}) > context_length ({cl})')
 
         # pass to model constructor
         super().__init__(params, tensors, states, **kwargs)

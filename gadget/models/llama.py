@@ -65,9 +65,9 @@ class LlamaModel(GgmlModel):
     def __init__(self, params, tensors, states, **kwargs):
         # validate batch_size and context_length
         if (bs := params['batch_size']) > (cl := params['context_length']):
-            raise ValueError('batch_size ({bs}) > context_length ({cl})')
+            raise ValueError(f'batch_size ({bs}) > context_length ({cl})')
         if (cl := params['context_length']) > (cl0 := params['llama.context_length']):
-            raise ValueError('context_length ({cl}) > maximum context_length ({cl0})')
+            raise ValueError(f'context_length ({cl}) > maximum context_length ({cl0})')
 
         # pass to model constructor
         super().__init__(params, tensors, states, **kwargs)
